@@ -4,6 +4,7 @@
 
 #include <QAbstractItemModel>
 #include <QItemSelectionModel>
+#include <QAbstractButton>
 #include <QScrollBar>
 #include <QPainter>
 #include <QMouseEvent>
@@ -13,6 +14,17 @@
 #include <set>
 #include <iostream>
 #include <cassert>
+
+//---
+
+class CQModelViewCornerButton : public QAbstractButton {
+ public:
+  CQModelViewCornerButton(QWidget *parent);
+
+  void paintEvent(QPaintEvent*) override;
+};
+
+//---
 
 CQModelView::
 CQModelView(QWidget *parent) :
@@ -55,6 +67,14 @@ CQModelView(QWidget *parent) :
   //---
 
   setSelectionModel(new CQModelViewSelectionModel(this));
+
+  //---
+
+  cornerWidget_ = new CQModelViewCornerButton(this);
+
+  cornerWidget_->setFocusPolicy(Qt::NoFocus);
+
+  connect(cornerWidget_, SIGNAL(clicked()), this, SLOT(selectAll()));
 }
 
 QAbstractItemModel *
@@ -236,6 +256,8 @@ setColumnHeatmap(int column, bool heatmap)
   columnData.heatmap = heatmap;
 }
 
+//---
+
 void
 CQModelView::
 setSortingEnabled(bool b)
@@ -267,6 +289,24 @@ sortByColumn(int column)
   model()->sort(column, hh_->sortIndicatorOrder());
 }
 
+//---
+
+bool
+CQModelView::
+isCornerButtonEnabled() const
+{
+  return cornerWidget_->isEnabled();
+}
+
+void
+CQModelView::
+setCornerButtonEnabled(bool enable)
+{
+  cornerWidget_->setEnabled(enable);
+}
+
+//---
+
 void
 CQModelView::
 resizeEvent(QResizeEvent *)
@@ -296,6 +336,12 @@ updateGeometries()
   //---
 
   QRect vrect = viewport()->geometry();
+
+  //---
+
+  cornerWidget_->setGeometry(0, 0, globalColumnData_.headerWidth, globalRowData_.headerHeight);
+
+  //---
 
   hh_->setGeometry(vrect.left(), vrect.top() - globalRowData_.headerHeight,
                    vrect.width(), globalRowData_.headerHeight);
@@ -472,6 +518,8 @@ drawCells(QPainter *painter)
 
   visCellDatas_.clear();
 
+  visCellDataAll_ = (scrollData_.nv >= nr_);
+
   r1_ = (scrollData_.nv > 0 ? verticalOffset()                      : 0      );
   r2_ = (scrollData_.nv > 0 ? verticalOffset() + scrollData_.nv - 1 : nr_ - 1);
 
@@ -486,6 +534,46 @@ drawCells(QPainter *painter)
     drawRow(painter, r, y);
 
     y += rowHeight;
+  }
+
+  //---
+
+  // draw selection
+  auto drawSelection = [&](const QRect &r) {
+    setRolePen  (painter, ColorRole::SelectionFg, 0.7);
+    setRoleBrush(painter, ColorRole::SelectionBg, 0.3);
+
+    painter->fillRect(r, painter->brush());
+
+    setRoleBrush(painter, ColorRole::None);
+
+    painter->drawRect(r.adjusted(0, 0, -1, -1));
+  };
+
+  const QItemSelection selection = sm_->selection();
+
+  for (auto it = selection.constBegin(); it != selection.constEnd(); ++it) {
+    const QItemSelectionRange &range = *it;
+
+    if (! visCellDataAll_) {
+      if (range.top() < r1_ || range.bottom() > r2_)
+        initVisCellDatas();
+    }
+
+    const VisColumnData &visColumnData1 = visColumnDatas_[range.left ()];
+    const VisColumnData &visColumnData2 = visColumnDatas_[range.right()];
+
+    const VisRowData &visRowData1 = visRowDatas_[range.top   ()];
+    const VisRowData &visRowData2 = visRowDatas_[range.bottom()];
+
+    int x1 = visColumnData1.rect.left  ();
+    int x2 = visColumnData2.rect.right ();
+    int y1 = visRowData1   .rect.top   ();
+    int y2 = visRowData2   .rect.bottom();
+
+    QRect r(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+
+    drawSelection(r);
   }
 }
 
@@ -598,8 +686,13 @@ drawHHeaderSection(QPainter *painter, int c, int x)
   // init style data
   QStyleOptionHeader option;
 
+  option.state = QStyle::State_Horizontal;
+
   if (c == mouseData_.moveData.hsection)
-    option.state |= QStyle::QStyle::State_MouseOver;
+    option.state |= QStyle::State_MouseOver;
+
+  if (c == mouseData_.pressData.hsection)
+    option.state |= QStyle::State_Sunken;
 
   if (hsm_->isSelected(ind))
     option.state |= QStyle::State_Selected;
@@ -607,37 +700,46 @@ drawHHeaderSection(QPainter *painter, int c, int x)
   if (c == hsm_->currentIndex().row())
     option.state |= QStyle::State_HasFocus;
 
-  option.rect             = visColumnData.rect;
-  option.icon             = QIcon();
-  option.iconAlignment    = Qt::AlignCenter;
+  if (hh_->isSortIndicatorShown() && hh_->sortIndicatorSection() == c)
+    option.sortIndicator = (hh_->sortIndicatorOrder() == Qt::AscendingOrder ?
+      QStyleOptionHeader::SortDown : QStyleOptionHeader::SortUp);
+
+  option.rect          = visColumnData.rect;
+  option.iconAlignment = Qt::AlignCenter;
+  option.section       = c;
+  option.text          = str;
+  option.textAlignment = (isNumeric ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
+  option.orientation   = Qt::Horizontal;
+
+  //---
+
+  // get decoration icon
+  QVariant ivar = model_->headerData(c, Qt::Horizontal, Qt::DecorationRole);
+
+  option.icon = qvariant_cast<QIcon>(ivar);
+
+  if (option.icon.isNull())
+    option.icon = qvariant_cast<QPixmap>(ivar);
+
+  //---
+
   option.position         = QStyleOptionHeader::Middle; // TODO
-  option.section          = c;
   option.selectedPosition = QStyleOptionHeader::NotAdjacent; // TODO
-  option.text             = str;
-  option.textAlignment    = (isNumeric ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
 
   //---
 
   auto initBrush = [&]() {
-    if (option.state & QStyle::State_Selected)
-      setRoleBrush(painter, ColorRole::HighlightBg);
-    else {
-      if (option.state & QStyle::State_MouseOver)
-        setRoleBrush(painter, ColorRole::MouseOverBg);
-      else
-        setRoleBrush(painter, ColorRole::HeaderBg);
-    }
+    if (option.state & QStyle::State_MouseOver)
+      setRoleBrush(painter, ColorRole::MouseOverBg);
+    else
+      setRoleBrush(painter, ColorRole::HeaderBg);
   };
 
   auto initPen = [&]() {
-    if (option.state & QStyle::State_Selected)
-      setRolePen(painter, ColorRole::HighlightText);
-    else {
-      if (option.state & QStyle::State_MouseOver)
-        setRolePen(painter, ColorRole::MouseOverText);
-      else
-        setRolePen(painter, ColorRole::HeaderText);
-    }
+    if (option.state & QStyle::State_MouseOver)
+      setRolePen(painter, ColorRole::MouseOverFg);
+    else
+      setRolePen(painter, ColorRole::HeaderFg);
   };
 
   auto fillBackground = [&]() {
@@ -647,14 +749,16 @@ drawHHeaderSection(QPainter *painter, int c, int x)
   };
 
   auto drawFocus = [&]() {
-    if (option.state & QStyle::State_Selected)
-      setRolePen(painter, ColorRole::HighlightText);
-    else
-      setRolePen(painter, ColorRole::HighlightBg);
-
+    setRolePen  (painter, ColorRole::HighlightBg);
     setRoleBrush(painter, ColorRole::None);
 
-    painter->drawRect(option.rect.adjusted(1, 1, -2, -2));
+    int x1 = option.rect.left  ();
+    int x2 = option.rect.right ();
+    int y  = option.rect.bottom();
+
+    painter->drawLine(x1, y - 2, x2, y - 2);
+    painter->drawLine(x1, y - 1, x2, y - 1);
+    painter->drawLine(x1, y    , x2, y    );
   };
 
   //---
@@ -663,28 +767,42 @@ drawHHeaderSection(QPainter *painter, int c, int x)
 
   //---
 
+  QStyleOptionHeader subopt = option;
+
+  subopt.rect = style()->subElementRect(QStyle::SE_HeaderLabel, &option, hh_);
+
   initPen();
 
-  painter->drawText(option.rect.adjusted(4, 0, -4, 0), option.textAlignment, option.text);
+  painter->drawText(subopt.rect, option.textAlignment, option.text);
 
-  //----
+  //---
+
+  if (option.sortIndicator != QStyleOptionHeader::None) {
+    QStyleOptionHeader subopt = option;
+
+    subopt.rect = style()->subElementRect(QStyle::SE_HeaderArrow, &option, hh_);
+
+    style()->drawPrimitive(QStyle::PE_IndicatorHeaderArrow, &subopt, painter, hh_);
+  }
+
+  //---
 
   QRect fullRect = visColumnData.rect.adjusted(-paintData_.margin, 0, paintData_.margin, 0);
 
-  setRolePen(painter, ColorRole::HeaderText);
+  setRolePen(painter, ColorRole::HeaderFg);
 
   painter->drawLine(fullRect.topLeft   (), fullRect.topRight   ());
   painter->drawLine(fullRect.bottomLeft(), fullRect.bottomRight());
 
-  //----
+  //---
 
   if (option.state & QStyle::State_HasFocus)
     drawFocus();
 
-  //----
+  //---
 
   if (c == mouseData_.pressData.hsectionh || c == mouseData_.moveData.hsectionh) {
-    setRolePen(painter, ColorRole::MouseOverText);
+    setRolePen(painter, ColorRole::MouseOverFg);
 
     int x  = fullRect.right();
     int y1 = fullRect.top();
@@ -694,6 +812,18 @@ drawHHeaderSection(QPainter *painter, int c, int x)
     painter->drawLine(x - 1, y1, x - 1, y2);
     painter->drawLine(x    , y1, x    , y2);
   }
+
+  //---
+
+  auto drawSelection = [&]() {
+    setRolePen  (painter, ColorRole::SelectionFg, 0.3);
+    setRoleBrush(painter, ColorRole::SelectionBg, 0.3);
+
+    painter->fillRect(fullRect, painter->brush());
+  };
+
+  if (option.state & QStyle::State_Selected)
+    drawSelection();
 }
 
 void
@@ -725,7 +855,7 @@ drawVHeader(QPainter *painter)
     QStyleOptionHeader option;
 
     if (r == mouseData_.moveData.vsection)
-      option.state |= QStyle::QStyle::State_MouseOver;
+      option.state |= QStyle::State_MouseOver;
 
     if (vsm_->isSelected(ind))
       option.state |= QStyle::State_Selected;
@@ -745,19 +875,13 @@ drawVHeader(QPainter *painter)
     //---
 
     auto fillBackground = [&]() {
-      if (option.state & QStyle::State_Selected) {
-        setRolePen  (painter, ColorRole::HighlightText);
-        setRoleBrush(painter, ColorRole::HighlightBg);
+      if (option.state & QStyle::State_MouseOver) {
+        setRolePen  (painter, ColorRole::MouseOverFg);
+        setRoleBrush(painter, ColorRole::MouseOverBg);
       }
       else {
-        if (option.state & QStyle::State_MouseOver) {
-          setRolePen  (painter, ColorRole::MouseOverText);
-          setRoleBrush(painter, ColorRole::MouseOverBg);
-        }
-        else {
-          setRolePen  (painter, ColorRole::HeaderText);
-          setRoleBrush(painter, ColorRole::HeaderBg);
-        }
+        setRolePen  (painter, ColorRole::HeaderFg);
+        setRoleBrush(painter, ColorRole::HeaderBg);
       }
 
       painter->fillRect(option.rect, painter->brush());
@@ -766,14 +890,16 @@ drawVHeader(QPainter *painter)
     };
 
     auto drawFocus = [&]() {
-      if (option.state & QStyle::State_Selected)
-        setRolePen(painter, ColorRole::HighlightText);
-      else
-        setRolePen(painter, ColorRole::HighlightBg);
-
+      setRolePen  (painter, ColorRole::HighlightBg);
       setRoleBrush(painter, ColorRole::None);
 
-      painter->drawRect(option.rect.adjusted(1, 1, -2, -2));
+      int x  = option.rect.right ();
+      int y1 = option.rect.top   ();
+      int y2 = option.rect.bottom();
+
+      painter->drawLine(x - 2, y1, x - 2, y2);
+      painter->drawLine(x - 1, y1, x - 1, y2);
+      painter->drawLine(x    , y1, x    , y2);
     };
 
     //---
@@ -782,7 +908,7 @@ drawVHeader(QPainter *painter)
 
     //---
 
-    setRolePen(painter, ColorRole::HeaderText);
+    setRolePen(painter, ColorRole::HeaderFg);
 
     painter->drawLine(option.rect.topRight(), option.rect.bottomRight());
 
@@ -790,6 +916,18 @@ drawVHeader(QPainter *painter)
 
     if (option.state & QStyle::State_HasFocus)
       drawFocus();
+
+    //---
+
+    auto drawSelection = [&]() {
+      setRolePen  (painter, ColorRole::SelectionFg, 0.3);
+      setRoleBrush(painter, ColorRole::SelectionBg, 0.3);
+
+      painter->fillRect(option.rect, painter->brush());
+    };
+
+    if (option.state & QStyle::State_Selected)
+      drawSelection();
 
     //---
 
@@ -858,7 +996,7 @@ drawRow(QPainter *painter, int r, int y)
     }
 
     if (valid)
-      drawColumn(painter, r, c, x, y);
+      drawCell(painter, r, c, x, y);
 
     x += columnData.width;
   }
@@ -869,7 +1007,7 @@ drawRow(QPainter *painter, int r, int y)
     if (! isColumnHidden(0)) {
       painter->setClipRect(QRect(0, y, freezeWidth, rowHeight));
 
-      drawColumn(painter, r, 0, 0, y);
+      drawCell(painter, r, 0, 0, y);
     }
 
     painter->restore();
@@ -878,7 +1016,7 @@ drawRow(QPainter *painter, int r, int y)
 
 void
 CQModelView::
-drawColumn(QPainter *painter, int r, int c, int x, int y)
+drawCell(QPainter *painter, int r, int c, int x, int y)
 {
   QModelIndex ind = model_->index(r, c, QModelIndex());
 
@@ -921,14 +1059,8 @@ drawColumn(QPainter *painter, int r, int c, int x, int y)
 
   option.state &= ~QStyle::State_MouseOver;
 
-  if (sm_ && sm_->isSelected(ind)) {
-    option.state |= QStyle::State_Selected;
-  }
-  else {
-    if (ind == mouseData_.moveData.ind) {
-      option.state |= QStyle::State_MouseOver;
-    }
-  }
+  if (ind == mouseData_.moveData.ind)
+    option.state |= QStyle::State_MouseOver;
 
   if (ind == currentIndex())
     option.state |= QStyle::State_HasFocus;
@@ -953,23 +1085,17 @@ drawColumn(QPainter *painter, int r, int c, int x, int y)
   //---
 
   auto fillBackground = [&]() {
-    if (option.state & QStyle::State_Selected) {
-      setRolePen  (painter, ColorRole::HighlightText);
-      setRoleBrush(painter, ColorRole::HighlightBg);
+    if (option.state & QStyle::State_MouseOver) {
+      setRolePen  (painter, ColorRole::MouseOverFg);
+      setRoleBrush(painter, ColorRole::MouseOverBg);
     }
     else {
-      if (option.state & QStyle::State_MouseOver) {
-        setRolePen  (painter, ColorRole::MouseOverText);
-        setRoleBrush(painter, ColorRole::MouseOverBg);
-      }
-      else {
-        setRolePen(painter, ColorRole::Text);
+      setRolePen(painter, ColorRole::Text);
 
-        if (option.features & QStyleOptionViewItem::Alternate)
-          setRoleBrush(painter, ColorRole::AlternateBg);
-        else
-          setRoleBrush(painter, ColorRole::Window);
-      }
+      if (option.features & QStyleOptionViewItem::Alternate)
+        setRoleBrush(painter, ColorRole::AlternateBg);
+      else
+        setRoleBrush(painter, ColorRole::Window);
     }
 
     painter->fillRect(option.rect, painter->brush());
@@ -985,7 +1111,7 @@ drawColumn(QPainter *painter, int r, int c, int x, int y)
   if (! delegate_) {
     fillBackground();
 
-    setRolePen(painter, ColorRole::HeaderText);
+    setRolePen(painter, ColorRole::HeaderFg);
 
     painter->drawText(option.rect.adjusted(4, 0, -4, 0), option.displayAlignment, str);
   }
@@ -1001,6 +1127,47 @@ drawColumn(QPainter *painter, int r, int c, int x, int y)
 
     delegate_->paint(painter, option, ind);
   }
+}
+
+void
+CQModelView::
+initVisCellDatas() const
+{
+  int rowHeight = this->rowHeight(0);
+
+  int y = -verticalOffset()*rowHeight;
+
+  for (int r = 0; r < nr_; ++r) {
+    int x = -horizontalOffset();
+
+    for (int c = 0; c < nc_; ++c) {
+      if (isColumnHidden(c))
+        continue;
+
+      const ColumnData &columnData = columnDatas_[c];
+
+      const VisColumnData &visColumnData = visColumnDatas_[c];
+
+      bool isLast = visColumnData.last;
+
+      QModelIndex ind1 = model_->index(r, c, QModelIndex());
+
+      VisCellData &visCellData = visCellDatas_[ind1];
+
+      if (isLast && isStretchLastColumn() && x + columnData.width < paintData_.w)
+        visCellData.rect = QRect(x, y, paintData_.w - x, rowHeight);
+      else
+        visCellData.rect = QRect(x, y, columnData.width, rowHeight);
+
+      x += columnData.width;
+    }
+
+    //---
+
+    y += rowHeight;
+  }
+
+  visCellDataAll_ = true;
 }
 
 void
@@ -1236,8 +1403,8 @@ handleMouseMove()
 
     redraw();
   }
-  else if (mouseData_.pressData.ind.isValid()) {
-    // TODO: hierarchical we need more work
+  else if (mouseData_.pressData.ind.isValid() && mouseData_.moveData .ind.isValid()) {
+    // TODO: hierarchical will need more work
     int c1 = std::min(mouseData_.pressData.ind.column(), mouseData_.moveData.ind.column());
     int c2 = std::max(mouseData_.pressData.ind.column(), mouseData_.moveData.ind.column());
 
@@ -1257,6 +1424,12 @@ handleMouseMove()
       sm_->select(selection, QItemSelectionModel::ClearAndSelect);
     else
       sm_->select(selection, QItemSelectionModel::Select);
+
+    //--
+
+    sm_->setCurrentIndex(mouseData_.moveData.ind, QItemSelectionModel::NoUpdate);
+
+    scrollTo(mouseData_.moveData.ind);
 
     redraw();
   }
@@ -1614,7 +1787,19 @@ visualRect(const QModelIndex &ind) const
 {
   auto p = visCellDatas_.find(ind);
 
-  return (p != visCellDatas_.end() ? (*p).second.rect : QRect());
+  if (p != visCellDatas_.end())
+    return (*p).second.rect;
+
+  if (! visCellDataAll_) {
+    initVisCellDatas();
+
+    auto p = visCellDatas_.find(ind);
+
+    if (p != visCellDatas_.end())
+      return (*p).second.rect;
+  }
+
+  return QRect();
 }
 
 void
@@ -1788,7 +1973,7 @@ QRegion
 CQModelView::
 visualRegionForSelection(const QItemSelection &) const
 {
-  // TODO
+  // TODO: used as update region for selection change
   QRegion r;
 
   return r;
@@ -1808,6 +1993,19 @@ cellPositionToIndex(PositionData &posData) const
     if (visCellData.rect.contains(posData.pos)) {
       posData.ind = cp.first;
       return true;
+    }
+  }
+
+  if (! visCellDataAll_) {
+    initVisCellDatas();
+
+    for (const auto &cp : visCellDatas_) {
+      const VisCellData &visCellData = cp.second;
+
+      if (visCellData.rect.contains(posData.pos)) {
+        posData.ind = cp.first;
+        return true;
+      }
     }
   }
 
@@ -1857,16 +2055,19 @@ vheaderPositionToIndex(PositionData &posData) const
 
 void
 CQModelView::
-setRolePen(QPainter *painter, ColorRole role)
+setRolePen(QPainter *painter, ColorRole role, double alpha)
 {
-  if (role != paintData_.penRole) {
-    paintData_.penRole = role;
+  if (role != paintData_.penRole || alpha != paintData_.penAlpha) {
+    paintData_.penRole  = role;
+    paintData_.penAlpha = alpha;
 
     if (paintData_.penRole != ColorRole::None) {
       auto p = paintData_.roleColors.find(paintData_.penRole);
 
       if (p == paintData_.roleColors.end()) {
         QColor c = roleColor(role);
+
+        c.setAlphaF(alpha);
 
         p = paintData_.roleColors.insert(p, RoleColors::value_type(paintData_.penRole, c));
       }
@@ -1880,16 +2081,19 @@ setRolePen(QPainter *painter, ColorRole role)
 
 void
 CQModelView::
-setRoleBrush(QPainter *painter, ColorRole role)
+setRoleBrush(QPainter *painter, ColorRole role, double alpha)
 {
-  if (role != paintData_.brushRole) {
-    paintData_.brushRole = role;
+  if (role != paintData_.brushRole || alpha != paintData_.brushAlpha) {
+    paintData_.brushRole  = role;
+    paintData_.brushAlpha = alpha;
 
     if (paintData_.brushRole != ColorRole::None) {
       auto p = paintData_.roleColors.find(paintData_.brushRole);
 
       if (p == paintData_.roleColors.end()) {
         QColor c = roleColor(role);
+
+        c.setAlphaF(alpha);
 
         p = paintData_.roleColors.insert(p, RoleColors::value_type(paintData_.brushRole, c));
       }
@@ -1906,17 +2110,19 @@ CQModelView::
 roleColor(ColorRole role) const
 {
   switch (role) {
-    case ColorRole::Window       : return palette().color(QPalette::Window);
-    case ColorRole::Text         : return palette().color(QPalette::Text);
-    case ColorRole::HeaderText   : return textColor(roleColor(ColorRole::HeaderBg));
-    case ColorRole::HeaderBg     : return QColor("#DDDDEE");
-    case ColorRole::MouseOverBg  : return blendColors(palette().color(QPalette::Highlight),
-                                                      palette().color(QPalette::Window), 0.5);
-    case ColorRole::MouseOverText: return textColor(roleColor(ColorRole::MouseOverBg));
-    case ColorRole::HighlightBg  : return palette().color(QPalette::Highlight);
-    case ColorRole::HighlightText: return palette().color(QPalette::HighlightedText);
-    case ColorRole::AlternateBg  : return palette().color(QPalette::AlternateBase);
-    case ColorRole::AlternateText: return palette().color(QPalette::Text);
+    case ColorRole::Window     : return palette().color(QPalette::Window);
+    case ColorRole::Text       : return palette().color(QPalette::Text);
+    case ColorRole::HeaderBg   : return QColor("#DDDDEE");
+    case ColorRole::HeaderFg   : return textColor(roleColor(ColorRole::HeaderBg));
+    case ColorRole::MouseOverBg: return blendColors(palette().color(QPalette::Highlight),
+                                                    palette().color(QPalette::Window), 0.5);
+    case ColorRole::MouseOverFg: return textColor(roleColor(ColorRole::MouseOverBg));
+    case ColorRole::HighlightBg: return palette().color(QPalette::Highlight);
+    case ColorRole::HighlightFg: return palette().color(QPalette::HighlightedText);
+    case ColorRole::AlternateBg: return palette().color(QPalette::AlternateBase);
+    case ColorRole::AlternateFg: return palette().color(QPalette::Text);
+    case ColorRole::SelectionBg: return QColor("#7F7F7F");
+    case ColorRole::SelectionFg: return QColor("#000000");
     default: assert(false); return QColor();
   }
 }
@@ -2201,4 +2407,41 @@ clearCurrentIndex()
   QItemSelectionModel::clearCurrentIndex();
 
   view_->updateCurrentIndices();
+}
+
+//------
+
+CQModelViewCornerButton::
+CQModelViewCornerButton(QWidget *parent) :
+ QAbstractButton(parent)
+{
+  setObjectName("corner");
+}
+
+void
+CQModelViewCornerButton::
+paintEvent(QPaintEvent*)
+{
+  QStyleOptionHeader opt;
+
+  opt.init(this);
+
+  QStyle::State state = QStyle::State_None;
+
+  if (isEnabled())
+    state |= QStyle::State_Enabled;
+
+  if (isActiveWindow())
+    state |= QStyle::State_Active;
+
+  if (isDown())
+    state |= QStyle::State_Sunken;
+
+  opt.state    = state;
+  opt.rect     = rect();
+  opt.position = QStyleOptionHeader::OnlyOneSection;
+
+  QPainter painter(this);
+
+  style()->drawControl(QStyle::CE_Header, &opt, &painter, this);
 }

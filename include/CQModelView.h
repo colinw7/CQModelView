@@ -8,6 +8,7 @@
 #include <QModelIndex>
 
 class CQModelViewHeader;
+class CQModelViewCornerButton;
 class CQModelViewSelectionModel;
 
 class QAbstractItemModel;
@@ -27,21 +28,21 @@ class QScrollBar;
  *  . change item selection mode
  *  . paint header section
  *  . multiple freeze columns
- *  . tooltip
  *  . sort indicator
  *  . horizontal scroll range/update
- *  . select on current item change
  *  . corner button
  *  . optional vertical header text (numbers)
  *  . model flags for cell enabled
- *  . hide column
+ *  . show grid (on/off style)
+ *  . scroll on mouse drag
  */
 class CQModelView : public QAbstractItemView {
   Q_OBJECT
 
-  Q_PROPERTY(bool freezeFirstColumn READ isFreezeFirstColumn WRITE setFreezeFirstColumn)
-  Q_PROPERTY(bool stretchLastColumn READ isStretchLastColumn WRITE setStretchLastColumn)
-  Q_PROPERTY(bool sortingEnabled    READ isSortingEnabled    WRITE setSortingEnabled   )
+  Q_PROPERTY(bool freezeFirstColumn   READ isFreezeFirstColumn   WRITE setFreezeFirstColumn  )
+  Q_PROPERTY(bool stretchLastColumn   READ isStretchLastColumn   WRITE setStretchLastColumn  )
+  Q_PROPERTY(bool sortingEnabled      READ isSortingEnabled      WRITE setSortingEnabled     )
+  Q_PROPERTY(bool cornerButtonEnabled READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
 
  public:
   CQModelView(QWidget *parent=nullptr);
@@ -81,6 +82,9 @@ class CQModelView : public QAbstractItemView {
   bool isSortingEnabled() const { return sortingEnabled_; }
   void setSortingEnabled(bool b);
 
+  bool isCornerButtonEnabled() const;
+  void setCornerButtonEnabled(bool enable);
+
   //---
 
   void sortByColumn(int column, Qt::SortOrder order);
@@ -119,7 +123,7 @@ class CQModelView : public QAbstractItemView {
 
   QRect visualRect(const QModelIndex &index) const override;
 
-  void scrollTo(const QModelIndex&, QAbstractItemView::ScrollHint) override;
+  void scrollTo(const QModelIndex&, QAbstractItemView::ScrollHint=EnsureVisible) override;
 
   QModelIndex indexAt(const QPoint &point) const override;
 
@@ -172,14 +176,16 @@ class CQModelView : public QAbstractItemView {
     None,
     Window,
     Text,
-    HeaderText,
     HeaderBg,
+    HeaderFg,
     MouseOverBg,
-    MouseOverText,
+    MouseOverFg,
     HighlightBg,
-    HighlightText,
+    HighlightFg,
     AlternateBg,
-    AlternateText
+    AlternateFg,
+    SelectionBg,
+    SelectionFg
   };
 
   struct MouseData {
@@ -211,6 +217,8 @@ class CQModelView : public QAbstractItemView {
 
   void drawVHeader(QPainter *painter);
 
+  void initVisCellDatas() const;
+
   void initVisibleColumns(bool clear);
 
   bool isNumericColumn(int c) const;
@@ -228,8 +236,8 @@ class CQModelView : public QAbstractItemView {
 
   void redraw();
 
-  void setRolePen  (QPainter *painter, ColorRole role);
-  void setRoleBrush(QPainter *painter, ColorRole role);
+  void setRolePen  (QPainter *painter, ColorRole role, double alpha=1.0);
+  void setRoleBrush(QPainter *painter, ColorRole role, double alpha=1.0);
 
   const MouseData &mouseData() const { return mouseData_; }
   void setMouseData(const MouseData &data) { mouseData_ = data; }
@@ -238,8 +246,8 @@ class CQModelView : public QAbstractItemView {
   void updateGeometries();
   void updateScrollBars();
 
-  void drawRow(QPainter *painter, int r, int y);
-  void drawColumn(QPainter *painter, int r, int c, int x, int y);
+  void drawRow (QPainter *painter, int r, int y);
+  void drawCell(QPainter *painter, int r, int c, int x, int y);
 
   bool cellPositionToIndex(PositionData &posData) const;
 
@@ -325,8 +333,10 @@ class CQModelView : public QAbstractItemView {
   using RoleColors = std::map<ColorRole,QColor>;
 
   struct PaintData {
-    ColorRole  penRole   = ColorRole::Text;
-    ColorRole  brushRole = ColorRole::Window;
+    ColorRole  penRole    = ColorRole::Text;
+    double     penAlpha   = 1.0;
+    ColorRole  brushRole  = ColorRole::Window;
+    double     brushAlpha = 1.0;
     RoleColors roleColors;
 
     QSize decorationSize;
@@ -339,8 +349,10 @@ class CQModelView : public QAbstractItemView {
     }
 
     void resetRole() {
-      penRole   = ColorRole::Text;
-      brushRole = ColorRole::Window;
+      penRole    = ColorRole::Text;
+      penAlpha   = 1.0;
+      brushRole  = ColorRole::Window;
+      brushAlpha = 1.0;
     }
   };
 
@@ -361,17 +373,20 @@ class CQModelView : public QAbstractItemView {
   bool stretchLastColumn_ { false };
   bool sortingEnabled_    { false };
 
-  GlobalColumnData globalColumnData_;
-  ColumnDatas      columnDatas_;
-  GlobalRowData    globalRowData_;
-  RowDatas         rowDatas_;
-  State            state_;
-  ScrollData       scrollData_;
-  VisColumnDatas   visColumnDatas_;
-  VisRowDatas      visRowDatas_;
-  VisCellDatas     visCellDatas_;
-  PaintData        paintData_;
-  MouseData        mouseData_;
+  CQModelViewCornerButton *cornerWidget_ { nullptr };
+
+  GlobalColumnData       globalColumnData_;
+  ColumnDatas            columnDatas_;
+  GlobalRowData          globalRowData_;
+  RowDatas               rowDatas_;
+  State                  state_;
+  ScrollData             scrollData_;
+  mutable VisColumnDatas visColumnDatas_;
+  mutable VisRowDatas    visRowDatas_;
+  mutable VisCellDatas   visCellDatas_;
+  mutable bool           visCellDataAll_ { false };
+  PaintData              paintData_;
+  MouseData              mouseData_;
 
   // widgets
   CQModelViewHeader* vh_ { nullptr };
