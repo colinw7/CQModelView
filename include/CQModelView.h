@@ -3,13 +3,16 @@
 
 #include <QAbstractItemView>
 #include <QItemSelectionModel>
+#include <QAbstractButton>
 #include <QHeaderView>
+#include <QLineEdit>
 #include <QPointer>
 #include <QModelIndex>
 
 class CQModelViewHeader;
 class CQModelViewCornerButton;
 class CQModelViewSelectionModel;
+class CQModelViewFilterEdit;
 
 class QAbstractItemModel;
 class QItemSelectionModel;
@@ -28,13 +31,14 @@ class QScrollBar;
  *  . change item selection mode
  *  . paint header section
  *  . multiple freeze columns
- *  . sort indicator
+ *  . draw sort indicator/column menu
  *  . horizontal scroll range/update
  *  . corner button
  *  . optional vertical header text (numbers)
  *  . model flags for cell enabled
  *  . show grid (on/off style)
- *  . scroll on mouse drag
+ *  . edit delegate
+ *  . regexp for filter
  */
 class CQModelView : public QAbstractItemView {
   Q_OBJECT
@@ -43,6 +47,7 @@ class CQModelView : public QAbstractItemView {
   Q_PROPERTY(bool stretchLastColumn   READ isStretchLastColumn   WRITE setStretchLastColumn  )
   Q_PROPERTY(bool sortingEnabled      READ isSortingEnabled      WRITE setSortingEnabled     )
   Q_PROPERTY(bool cornerButtonEnabled READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
+  Q_PROPERTY(bool showFilter          READ isShowFilter          WRITE setShowFilter         )
 
  public:
   CQModelView(QWidget *parent=nullptr);
@@ -85,6 +90,9 @@ class CQModelView : public QAbstractItemView {
   bool isCornerButtonEnabled() const;
   void setCornerButtonEnabled(bool enable);
 
+  bool isShowFilter() const { return showFilter_; }
+  void setShowFilter(bool b);
+
   //---
 
   void sortByColumn(int column, Qt::SortOrder order);
@@ -94,6 +102,11 @@ class CQModelView : public QAbstractItemView {
 
   bool isColumnHidden(int column) const;
   void setColumnHidden(int column, bool hide);
+
+  //---
+
+  bool isRowHidden(int row) const;
+  void setRowHidden(int row, bool hide);
 
   //---
 
@@ -217,9 +230,7 @@ class CQModelView : public QAbstractItemView {
 
   void drawVHeader(QPainter *painter);
 
-  void initVisCellDatas() const;
-
-  void initVisibleColumns(bool clear);
+  void updateVisColumns();
 
   bool isNumericColumn(int c) const;
 
@@ -261,6 +272,9 @@ class CQModelView : public QAbstractItemView {
   void hideColumn(int column);
   void showColumn(int column);
 
+  void hideRow(int row);
+  void showRow(int row);
+
  private slots:
   void modelChangedSlot();
 
@@ -282,6 +296,8 @@ class CQModelView : public QAbstractItemView {
   void fitColumnSlot();
 
   void setHeatmapSlot(bool b);
+
+  void editFilterSlot();
 
  private:
   struct GlobalColumnData {
@@ -307,6 +323,14 @@ class CQModelView : public QAbstractItemView {
 
   struct State {
     bool updateScrollBars { false };
+    bool updateVisColumns { false };
+    bool updateGeometries { false };
+
+    void updateAll() {
+      updateScrollBars = true;
+      updateVisColumns = true;
+      updateGeometries = true;
+    }
   };
 
   struct VisColumnData {
@@ -318,6 +342,8 @@ class CQModelView : public QAbstractItemView {
 
   struct VisRowData {
     QRect rect;
+    int   ir        { -1 };
+    bool  alternate { false };
   };
 
   struct VisCellData {
@@ -343,6 +369,8 @@ class CQModelView : public QAbstractItemView {
     bool  showDecorationSelected { false };
     int   w                      { 0 };
     int   margin                 { 0 };
+    int   rowHeight              { 0 };
+    int   vh                     { 0 };
 
     void reset() {
       resetRole();
@@ -364,6 +392,7 @@ class CQModelView : public QAbstractItemView {
   using VisColumnDatas = std::map<int,VisColumnData>;
   using VisRowDatas    = std::map<int,VisRowData>;
   using VisCellDatas   = std::map<QModelIndex,VisCellData>;
+  using FilterEdits    = std::vector<CQModelViewFilterEdit*>;
 
   ModelP    model_;
   SelModelP sm_;
@@ -372,21 +401,25 @@ class CQModelView : public QAbstractItemView {
   bool freezeFirstColumn_ { false };
   bool stretchLastColumn_ { false };
   bool sortingEnabled_    { false };
+  bool showFilter_        { false };
 
   CQModelViewCornerButton *cornerWidget_ { nullptr };
 
-  GlobalColumnData       globalColumnData_;
-  ColumnDatas            columnDatas_;
-  GlobalRowData          globalRowData_;
-  RowDatas               rowDatas_;
-  State                  state_;
-  ScrollData             scrollData_;
-  mutable VisColumnDatas visColumnDatas_;
-  mutable VisRowDatas    visRowDatas_;
-  mutable VisCellDatas   visCellDatas_;
-  mutable bool           visCellDataAll_ { false };
-  PaintData              paintData_;
-  MouseData              mouseData_;
+  GlobalColumnData globalColumnData_; // global column data
+  ColumnDatas      columnDatas_;      // per column data
+
+  GlobalRowData    globalRowData_;    // global row data
+  RowDatas         rowDatas_;         // per wor data
+
+  State            state_;            // state
+
+  ScrollData       scrollData_;       // scroll data (updateScrollBars)
+  VisColumnDatas   visColumnDatas_;   // vis column data (updateVisibleColumns)
+  VisRowDatas      visRowDatas_;
+  VisCellDatas     visCellDatas_;
+  PaintData        paintData_;
+  MouseData        mouseData_;
+  FilterEdits      filterEdits_;
 
   // widgets
   CQModelViewHeader* vh_ { nullptr };
@@ -398,10 +431,10 @@ class CQModelView : public QAbstractItemView {
   QItemSelectionModel *hsm_ { nullptr };
 
   // draw data
-  int          nr_ { 0 };
-  int          nc_ { 0 };
-  int          r1_ { 0 };
-  int          r2_ { 0 };
+  int          nr_  { 0 };
+  int          nc_  { 0 };
+  int          nvr_ { 0 };
+  int          nvc_ { 0 };
   QFontMetrics fm_;
 };
 
@@ -463,6 +496,34 @@ class CQModelViewSelectionModel : public QItemSelectionModel {
 
  private:
   CQModelView* view_ { nullptr };
+};
+
+//---
+
+class CQModelViewCornerButton : public QAbstractButton {
+ public:
+  CQModelViewCornerButton(CQModelView *view);
+
+  void paintEvent(QPaintEvent*) override;
+
+ private:
+  CQModelView* view_ { nullptr };
+};
+
+//---
+
+class CQModelViewFilterEdit : public QLineEdit {
+  Q_OBJECT
+
+ public:
+  CQModelViewFilterEdit(CQModelView *view, int column = 1);
+
+  int column() const { return column_; }
+  void setColumn(int c) { column_ = c; }
+
+ private:
+  CQModelView* view_   { nullptr };
+  int          column_ { -1 };
 };
 
 #endif

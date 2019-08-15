@@ -3,6 +3,8 @@
 #include <QAbstractItemView>
 #include <QPainter>
 
+#include <svg/edit_item_svg.h>
+
 CQItemDelegate::
 CQItemDelegate(QAbstractItemView *view) :
  view_(view)
@@ -14,8 +16,15 @@ void
 CQItemDelegate::
 paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
-  if (! drawType(painter, option, index))
+  isEditable_  = (index.flags() & Qt::ItemIsEditable);
+  isMouseOver_ = (option.state & QStyle::State_MouseOver);
+
+  if (! drawType(painter, option, index)) {
     QItemDelegate::paint(painter, option, index);
+
+    if (isEditable_ && isMouseOver_)
+      drawEditImage(painter, option.rect, /*numeric*/false);
+  }
 }
 
 bool
@@ -47,11 +56,16 @@ drawType(QPainter *painter, const QStyleOptionViewItem &option, const QModelInde
 
   // draw mapped real
   if (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER) {
-    if (! isHeatmap())
-      return false;
+    if (isHeatmap()) {
+      if (! drawRealInRange(painter, option, index))
+        return false;
+    }
+    else {
+      QItemDelegate::paint(painter, option, index);
 
-    if (! drawRealInRange(painter, option, index))
-      return false;
+      if (isEditable_ && isMouseOver_)
+        drawEditImage(painter, option.rect, /*numeric*/true);
+    }
   }
   else {
     return false;
@@ -172,4 +186,22 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   QItemDelegate::drawFocus(painter, option, option.rect);
 
   return true;
+}
+
+void
+CQItemDelegate::
+drawEditImage(QPainter *painter, const QRect &rect, bool numeric) const
+{
+  QImage image = s_EDIT_ITEM_SVG.image(32, 32);
+
+  int dy = (rect.height() - image.height())/2;
+
+  QRect rect1;
+
+  if (numeric)
+    rect1 = QRect(rect.left() + 2, rect.top() + dy, image.width(), image.height());
+  else
+    rect1 = QRect(rect.right() - image.width() - 2, rect.top() + dy, image.width(), image.height());
+
+  painter->drawImage(rect1, image);
 }

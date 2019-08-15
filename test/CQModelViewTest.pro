@@ -12,7 +12,7 @@ CONFIG += debug
 
 MOC_DIR = .moc
 
-QT += widgets
+QT += widgets svg
 
 # Input
 SOURCES += \

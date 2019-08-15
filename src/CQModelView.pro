@@ -4,7 +4,7 @@ TARGET = CQModelView
 
 DEPENDPATH += .
 
-QT += widgets
+QT += widgets svg
 
 CONFIG += staticlib
 

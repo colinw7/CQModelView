@@ -30,9 +30,13 @@ class CQItemDelegate : public QItemDelegate {
   bool drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
                        const QModelIndex &index) const;
 
+  void drawEditImage(QPainter *painter, const QRect &rect, bool numeric) const;
+
  private:
-  QAbstractItemView *view_    { nullptr };
-  bool               heatmap_ { false };
+  QAbstractItemView *view_        { nullptr };
+  bool               heatmap_     { false };
+  mutable bool       isEditable_  { false };
+  mutable bool       isMouseOver_ { false };
 };
 
 #endif
