@@ -277,6 +277,71 @@ setColumnHeatmap(int column, bool heatmap)
 
 void
 CQModelView::
+setFreezeFirstColumn(bool b)
+{
+  freezeFirstColumn_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+setStretchLastColumn(bool b)
+{
+  stretchLastColumn_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+setMultiHeaderLines(bool b)
+{
+  multiHeaderLines_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+setShowVerticalHeader(bool b)
+{
+  showVerticalHeader_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+setShowFilter(bool b)
+{
+  showFilter_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
 setSortingEnabled(bool b)
 {
   sortingEnabled_ = b;
@@ -287,25 +352,6 @@ setSortingEnabled(bool b)
     sortByColumn(hh_->sortIndicatorSection(), hh_->sortIndicatorOrder());
 
   redraw();
-}
-
-void
-CQModelView::
-sortByColumn(int column, Qt::SortOrder order)
-{
-  hh_->setSortIndicator(column, order);
-
-  sortByColumn(column);
-}
-
-void
-CQModelView::
-sortByColumn(int column)
-{
-  if (column < 0 || column >= nc_)
-    return;
-
-  model()->sort(column, hh_->sortIndicatorOrder());
 }
 
 //---
@@ -330,13 +376,47 @@ setCornerButtonEnabled(bool enable)
 
 void
 CQModelView::
-setShowFilter(bool b)
+setIndentation(int i)
 {
-  showFilter_ = b;
-
-  state_.updateGeometries = true;
+  indentation_ = i;
 
   state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+setRootIsDecorated(bool b)
+{
+  rootIsDecorated_ = b;
+
+  state_.updateAll();
+
+  redraw();
+}
+
+//---
+
+void
+CQModelView::
+sortByColumn(int column, Qt::SortOrder order)
+{
+  hh_->setSortIndicator(column, order);
+
+  sortByColumn(column);
+}
+
+void
+CQModelView::
+sortByColumn(int column)
+{
+  if (column < 0 || column >= nc_)
+    return;
+
+  model()->sort(column, hh_->sortIndicatorOrder());
 
   redraw();
 }
@@ -375,21 +455,109 @@ updateGeometries()
 
   int fh = fm_.height();
 
+  globalRowData_.headerHeight = 0;
+
+  using ColumnStrs = std::map<int,QStringList>;
+
+  ColumnStrs columnStrs;
+  int        ncr = 0;
+
+  for (int c = 0; c < nc_; ++c) {
+    if (isColumnHidden(c))
+      continue;
+
+    QVariant data = model_->headerData(c, Qt::Horizontal, Qt::DisplayRole);
+
+    QString str = data.toString();
+
+    if (isMultiHeaderLines()) {
+      QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
+
+      int ns = strs.size();
+
+      ncr = std::max(ncr, ns);
+
+      for (int i = 0; i < ns; ++i)
+        columnStrs[c].push_back(strs[i]);
+    }
+    else  {
+      columnStrs[c].push_back(str);
+
+      ncr = 1;
+    }
+  }
+
+  //---
+
+  rowColumnSpans_.clear();
+
+  //---
+
+  using RowStrs = std::map<int,QStringList>;
+
+  if (isMultiHeaderLines()) {
+    // pad from front (lines are bottom to top)
+    for (auto &pcs : columnStrs) {
+      QStringList &strs = pcs.second;
+
+      while (strs.size() < ncr)
+        strs.push_front("");
+    }
+
+    //---
+
+    RowStrs rowStrs;
+
+    for (int r = 0; r < ncr; ++r) {
+      for (int c = 0; c < nc_; ++c) {
+        rowStrs[r].push_back(columnStrs[c][r]);
+      }
+    }
+
+    //---
+
+    for (auto &prs : rowStrs) {
+      int          r    = prs.first;
+      QStringList &strs = prs.second;
+
+      int nc = strs.size();
+
+      int c1 = 0;
+
+      while (c1 + 1 < nc) {
+        int c2 = c1;
+
+        while (c2 + 1 < nc && strs[c2 + 1] == strs[c1])
+          ++c2;
+
+        if (c2 > c1)
+          rowColumnSpans_[r].push_back(ColumnSpan(c1, c2));
+
+        c1 = c2 + 1;
+      }
+    }
+  }
+
+  //---
+
+  globalRowData_   .headerHeight = ncr*(fh + 1) + 2*globalRowData_.margin;
   globalColumnData_.headerWidth  = fm_.width("X") + 4;
-  globalRowData_   .headerHeight = fh + globalRowData_.headerMargin;
   globalRowData_   .height       = fh + globalRowData_.margin;
 
   // space for headers
   int filterHeight = (isShowFilter() ? fh + 8 : 0);
 
-  setViewportMargins(globalColumnData_.headerWidth,
-                     globalRowData_.headerHeight + filterHeight, 0, 0);
+  int lm = (isShowVerticalHeader() ? globalColumnData_.headerWidth : 0);
+
+  setViewportMargins(lm, globalRowData_.headerHeight + filterHeight, 0, 0);
 
   //---
 
   QRect vrect = viewport()->geometry();
 
   //---
+
+  cornerWidget_->setVisible(isShowVerticalHeader());
 
   cornerWidget_->setGeometry(0, 0, globalColumnData_.headerWidth, globalRowData_.headerHeight);
 
@@ -555,6 +723,9 @@ numVisibleRows(const QModelIndex &parent, int &nvr)
     ++nvr;
 
     if (children) {
+      if (model_->canFetchMore(parent))
+        model_->fetchMore(parent);
+
       numVisibleRows(ind1, nvr);
     }
   }
@@ -812,6 +983,55 @@ drawHHeader(QPainter *painter)
     }
   }
 
+  //---
+
+  // draw span text
+  if (isMultiHeaderLines()) {
+    int fh = fm_.height();
+
+    for (const auto &pr : rowColumnSpans_) {
+      int                r           = pr.first;
+      const ColumnSpans &columnSpans = pr.second;
+
+      int y1 = r*(fh + 1) + globalRowData_.margin;
+      int y2 = y1 + fh;
+
+      for (const auto &span : columnSpans) {
+        int c1 = span.first;
+        int c2 = span.second;
+
+        const VisColumnData &visColumnData1 = visColumnDatas_[c1];
+        const VisColumnData &visColumnData2 = visColumnDatas_[c2];
+
+        QRect rect(visColumnData1.rect.left(), y1,
+                   visColumnData2.rect.right() - visColumnData1.rect.left() + 1, y2 - y1 + 1);
+
+        QVariant data = model_->headerData(c1, Qt::Horizontal, Qt::DisplayRole);
+
+        QString str = data.toString();
+
+        if (isMultiHeaderLines()) {
+          QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
+
+          setRolePen(painter, ColorRole::HeaderFg);
+
+          painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, strs[r]);
+        }
+        else
+          painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, str);
+
+        //---
+
+        setRolePen(painter, ColorRole::HeaderLineFg);
+
+        painter->drawLine(visColumnData2.rect.topRight  (), visColumnData2.rect.bottomRight());
+        painter->drawLine(rect.bottomLeft(), rect.bottomRight());
+      }
+    }
+  }
+
+  //---
+
   painter->restore();
 }
 
@@ -874,7 +1094,6 @@ drawHHeaderSection(QPainter *painter, int c, int x)
   option.rect          = visColumnData.rect;
   option.iconAlignment = Qt::AlignCenter;
   option.section       = c;
-  option.text          = str;
   option.textAlignment = (isNumeric ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
   option.orientation   = Qt::Horizontal;
 
@@ -909,10 +1128,10 @@ drawHHeaderSection(QPainter *painter, int c, int x)
       setRolePen(painter, ColorRole::HeaderFg);
   };
 
-  auto fillBackground = [&]() {
+  auto fillBackground = [&](const QRect &r) {
     initBrush();
 
-    painter->fillRect(option.rect, painter->brush());
+    painter->fillRect(r, painter->brush());
   };
 
   auto drawFocus = [&]() {
@@ -929,17 +1148,97 @@ drawHHeaderSection(QPainter *painter, int c, int x)
 
   //---
 
-  fillBackground();
+  struct RectSpan {
+    QRect rect;
+    bool  inSpan { false };
+
+    RectSpan(const QRect &rect, bool inSpan) :
+     rect(rect), inSpan(inSpan) {
+    }
+  };
+
+  using RowRects = std::vector<RectSpan>;
+
+  RowRects rowRects;
+
+  int y  = option.rect.top() + globalRowData_.margin;
+  int fh = fm_.height();
 
   //---
 
-  QStyleOptionHeader subopt = option;
+  QStringList strs;
 
-  subopt.rect = style()->subElementRect(QStyle::SE_HeaderLabel, &option, hh_);
+  if (isMultiHeaderLines())
+    strs = str.split(QRegExp("\n|\r\n|\r"));
+  else
+    strs.push_back(str);
+
+  int ns = strs.length();
+
+  //---
+
+  if (ns > 1) {
+    for (int r = 0; r < ns; ++r) {
+      bool inSpan = false;
+
+      const ColumnSpans &columnSpans = rowColumnSpans_[r];
+
+      for (const auto &span : columnSpans) {
+        if (c >= span.first && c <= span.second) {
+          inSpan = true;
+          break;
+        }
+      }
+
+      //---
+
+      QRect rect;
+
+      if      (r == 0)
+        rect = QRect(option.rect.left(), y - globalRowData_.margin, option.rect.width(), fh);
+      else if (r == ns - 1)
+        rect = QRect(option.rect.left(), y, option.rect.width(), fh + globalRowData_.margin);
+      else
+        rect = QRect(option.rect.left(), y, option.rect.width(), fh);
+
+      rowRects.push_back(RectSpan(rect, inSpan));
+
+      y += fh + 1;
+    }
+  }
+  else {
+    rowRects.push_back(RectSpan(option.rect, false));
+  }
+
+  //---
+
+  for (const auto &rowRect : rowRects) {
+    if (! rowRect.inSpan)
+      fillBackground(rowRect.rect.adjusted(-paintData_.margin, 0, paintData_.margin, 0));
+  }
+
+  //---
 
   initPen();
 
-  painter->drawText(subopt.rect, option.textAlignment, option.text);
+  for (int r = 0; r < strs.size(); ++r) {
+    const RectSpan &rectSpan = rowRects[r];
+
+    //---
+
+    QStyleOptionHeader subopt = option;
+
+    subopt.text = strs[r];
+
+    if (! rectSpan.inSpan) {
+      subopt.rect = style()->subElementRect(QStyle::SE_HeaderLabel, &subopt, hh_);
+
+      QRect rect(subopt.rect.left(), rectSpan.rect.top(),
+                 subopt.rect.width(), rectSpan.rect.height());
+
+      painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, strs[r]);
+    }
+  }
 
   //---
 
@@ -955,10 +1254,20 @@ drawHHeaderSection(QPainter *painter, int c, int x)
 
   QRect fullRect = visColumnData.rect.adjusted(-paintData_.margin, 0, paintData_.margin, 0);
 
-  setRolePen(painter, ColorRole::HeaderFg);
+  setRolePen(painter, ColorRole::HeaderLineFg);
 
   painter->drawLine(fullRect.topLeft   (), fullRect.topRight   ());
   painter->drawLine(fullRect.bottomLeft(), fullRect.bottomRight());
+
+  for (const auto &rowRect : rowRects) {
+    if (! rowRect.inSpan) {
+      int x  = rowRect.rect.right() + paintData_.margin;
+      int y1 = rowRect.rect.top();
+      int y2 = rowRect.rect.bottom();
+
+      painter->drawLine(x, y1, x, y2);
+    }
+  }
 
   //---
 
@@ -970,25 +1279,33 @@ drawHHeaderSection(QPainter *painter, int c, int x)
   if (c == mouseData_.pressData.hsectionh || c == mouseData_.moveData.hsectionh) {
     setRolePen(painter, ColorRole::MouseOverFg);
 
-    int x  = fullRect.right();
-    int y1 = fullRect.top();
-    int y2 = fullRect.bottom();
+    for (const auto &rowRect : rowRects) {
+      if (! rowRect.inSpan) {
+        int x  = rowRect.rect.right() + paintData_.margin;
+        int y1 = rowRect.rect.top();
+        int y2 = rowRect.rect.bottom();
 
-    for (int i = 0; i < 3; ++i)
-      painter->drawLine(x - i, y1, x - i, y2);
+        for (int i = 0; i < 3; ++i)
+          painter->drawLine(x - i, y1, x - i, y2);
+      }
+    }
   }
 
   //---
 
-  auto drawSelection = [&]() {
+  auto drawSelection = [&](const QRect &rect) {
     setRolePen  (painter, ColorRole::SelectionFg, 0.3);
     setRoleBrush(painter, ColorRole::SelectionBg, 0.3);
 
-    painter->fillRect(fullRect, painter->brush());
+    painter->fillRect(rect, painter->brush());
   };
 
-  if (option.state & QStyle::State_Selected)
-    drawSelection();
+  if (option.state & QStyle::State_Selected) {
+    for (const auto &rowRect : rowRects) {
+      if (! rowRect.inSpan)
+        drawSelection(rowRect.rect.adjusted(-paintData_.margin, 0, paintData_.margin, 0));
+    }
+  }
 }
 
 void
@@ -1097,7 +1414,7 @@ drawVHeader(QPainter *painter)
 
       //---
 
-      setRolePen(painter, ColorRole::HeaderFg);
+      setRolePen(painter, ColorRole::HeaderLineFg);
 
       painter->drawLine(option.rect.topRight(), option.rect.bottomRight());
 
@@ -1222,6 +1539,9 @@ drawRow(QPainter *painter, int r, const QModelIndex &parent)
 
     paintData_.maxDepth = std::max(paintData_.maxDepth, paintData_.depth);
 
+    if (model_->canFetchMore(parent))
+      model_->fetchMore(parent);
+
     int nr1 = model_->rowCount(ind1);
 
     for (int r1 = 0; r1 < nr1; ++r1) {
@@ -1255,7 +1575,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent, int x,
   int x2 = x + cw - 1;
 
   if (hierarchical_ && c == 0) {
-    int indent = (paintData_.depth + 1)*indentation();
+    int indent = (paintData_.depth + rootIsDecorated())*indentation();
 
     //---
 
@@ -1899,6 +2219,10 @@ showMenu(const QPoint &pos)
                    SLOT(freezeFirstColumnSlot(bool)));
   addCheckedAction("Stretch Last Column", isStretchLastColumn(),
                    SLOT(stretchLastColumnSlot(bool)));
+  addCheckedAction("Multi Header Lines", isMultiHeaderLines(),
+                   SLOT(multiHeaderLinesSlot(bool)));
+  addCheckedAction("Root Is Decorated", rootIsDecorated(),
+                   SLOT(rootIsDecoratedSlot(bool)));
 
   addCheckedAction("Sorting Enabled", isSortingEnabled(),
                    SLOT(sortingEnabledSlot(bool)));
@@ -1916,6 +2240,11 @@ showMenu(const QPoint &pos)
       addAction("Sort Decreasing", SLOT(sortDecreasingSlot()));
     }
   }
+
+  addCheckedAction("Show Vertical Header", isShowVerticalHeader(),
+                   SLOT(showVerticalHeaderSlot(bool)));
+  addCheckedAction("Show Filter", isShowFilter(),
+                   SLOT(showFilterSlot(bool)));
 
   addAction("Fit All Columns", SLOT(fitAllColumnsSlot()));
 
@@ -2004,11 +2333,23 @@ stretchLastColumnSlot(bool b)
 
 void
 CQModelView::
+multiHeaderLinesSlot(bool b)
+{
+  setMultiHeaderLines(b);
+}
+
+void
+CQModelView::
+rootIsDecoratedSlot(bool b)
+{
+  setRootIsDecorated(b);
+}
+
+void
+CQModelView::
 sortingEnabledSlot(bool b)
 {
   setSortingEnabled(b);
-
-  redraw();
 }
 
 void
@@ -2016,8 +2357,6 @@ CQModelView::
 sortIncreasingSlot()
 {
   sortByColumn(mouseData_.menuData.hsection, Qt::AscendingOrder);
-
-  redraw();
 }
 
 void
@@ -2025,8 +2364,6 @@ CQModelView::
 sortDecreasingSlot()
 {
   sortByColumn(mouseData_.menuData.hsection, Qt::DescendingOrder);
-
-  redraw();
 }
 
 //------
@@ -2150,6 +2487,9 @@ expand(const QModelIndex &index)
   if (p != collapsed_.end())
     collapsed_.erase(p);
 
+  if (model_->canFetchMore(index))
+    model_->fetchMore(index);
+
   redraw();
 
   emit expanded(index);
@@ -2252,6 +2592,22 @@ collapseSlot()
 
 void
 CQModelView::
+showVerticalHeaderSlot(bool b)
+{
+  setShowVerticalHeader(b);
+}
+
+void
+CQModelView::
+showFilterSlot(bool b)
+{
+  setShowFilter(b);
+}
+
+//------
+
+void
+CQModelView::
 fitAllColumnsSlot()
 {
   for (int c = 0; c < nc_; ++c)
@@ -2279,7 +2635,18 @@ fitColumn(int column)
 
   QVariant data = model_->headerData(column, Qt::Horizontal, Qt::DisplayRole);
 
-  int w = fm_.width(data.toString());
+  QString str = data.toString();
+
+  int w = 0;
+
+  if (isMultiHeaderLines()) {
+    QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
+
+    for (int i = 0; i < strs.length(); ++i)
+      w = std::max(w, fm_.width(strs[i]));
+  }
+  else
+    w = std::max(w, fm_.width(str));
 
   maxWidth = std::max(maxWidth, w);
 
@@ -2310,6 +2677,9 @@ bool
 CQModelView::
 maxColumnWidth(int column, const QModelIndex &parent, int depth, int &nvr, int &maxWidth)
 {
+  if (model_->canFetchMore(parent))
+    model_->fetchMore(parent);
+
   int nr = model_->rowCount(parent);
 
   for (int r = 0; r < nr; ++r) {
@@ -2323,7 +2693,7 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth, int &nvr, int &
     int w = fm_.width(data.toString());
 
     if (hierarchical_ && column == 0)
-      w += (depth + 1)*indentation();
+      w += (depth + rootIsDecorated())*indentation();
 
     maxWidth = std::max(maxWidth, w);
 
@@ -2729,19 +3099,21 @@ CQModelView::
 roleColor(ColorRole role) const
 {
   switch (role) {
-    case ColorRole::Window     : return palette().color(QPalette::Window);
-    case ColorRole::Text       : return palette().color(QPalette::Text);
-    case ColorRole::HeaderBg   : return QColor("#DDDDEE");
-    case ColorRole::HeaderFg   : return textColor(roleColor(ColorRole::HeaderBg));
-    case ColorRole::MouseOverBg: return blendColors(palette().color(QPalette::Highlight),
-                                                    palette().color(QPalette::Window), 0.5);
-    case ColorRole::MouseOverFg: return textColor(roleColor(ColorRole::MouseOverBg));
-    case ColorRole::HighlightBg: return palette().color(QPalette::Highlight);
-    case ColorRole::HighlightFg: return palette().color(QPalette::HighlightedText);
-    case ColorRole::AlternateBg: return palette().color(QPalette::AlternateBase);
-    case ColorRole::AlternateFg: return palette().color(QPalette::Text);
-    case ColorRole::SelectionBg: return QColor("#7F7F7F");
-    case ColorRole::SelectionFg: return QColor("#000000");
+    case ColorRole::Window      : return palette().color(QPalette::Window);
+    case ColorRole::Text        : return palette().color(QPalette::Text);
+    case ColorRole::HeaderBg    : return QColor("#DDDDEE");
+    case ColorRole::HeaderFg    : return textColor(roleColor(ColorRole::HeaderBg));
+    case ColorRole::HeaderLineFg: return blendColors(roleColor(ColorRole::HeaderFg),
+                                                     palette().color(QPalette::Window), 0.5);
+    case ColorRole::MouseOverBg : return blendColors(palette().color(QPalette::Highlight),
+                                                     palette().color(QPalette::Window), 0.5);
+    case ColorRole::MouseOverFg : return textColor(roleColor(ColorRole::MouseOverBg));
+    case ColorRole::HighlightBg : return palette().color(QPalette::Highlight);
+    case ColorRole::HighlightFg : return palette().color(QPalette::HighlightedText);
+    case ColorRole::AlternateBg : return palette().color(QPalette::AlternateBase);
+    case ColorRole::AlternateFg : return palette().color(QPalette::Text);
+    case ColorRole::SelectionBg : return QColor("#7F7F7F");
+    case ColorRole::SelectionFg : return QColor("#000000");
     default: assert(false); return QColor();
   }
 }
