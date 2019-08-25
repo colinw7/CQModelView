@@ -161,6 +161,10 @@ class CQModelView : public QAbstractItemView {
 
   //---
 
+  bool isHierarchical() const { return hierarchical_; }
+
+  //---
+
   void fitColumn(int column);
 
   //---
@@ -578,6 +582,7 @@ class CQModelView : public QAbstractItemView {
   int          nvr_ { 0 };
   int          nvc_ { 0 };
   QRect        visualRect_;
+  int          visualBorderRows_ { 3 };
   QRect        paintRect_;
   QFontMetrics fm_;
 };

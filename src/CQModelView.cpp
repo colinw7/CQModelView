@@ -1550,7 +1550,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
   int x1 = visColumnData.rect.left() - paintData_.margin;
 
-  if (hierarchical_ && c == 0) {
+  if (isHierarchical() && c == 0) {
     int indent = (visRowData.depth + rootIsDecorated())*indentation();
 
     //---
@@ -1843,7 +1843,7 @@ void
 CQModelView::
 numVisibleRows(const QModelIndex &parent, int &nvr, int depth)
 {
-  int nr = model_->rowCount(parent);
+  int nr = (model_ ? model_->rowCount(parent) : 0);
 
   for (int r = 0; r < nr; ++r) {
     if (isRowHidden(r, parent))
@@ -1896,6 +1896,13 @@ updateVisRows()
 
   int rowHeight = this->rowHeight(0);
 
+  int borderHeight = visualBorderRows_*rowHeight;
+
+  int vy1 = visualRect_.top   () - borderHeight;
+  int vy2 = visualRect_.bottom() + borderHeight;
+
+  //---
+
   int y1 = -verticalOffset()*rowHeight;
 
   for (const auto &pr : rowDatas_) {
@@ -1919,7 +1926,7 @@ updateVisRows()
     visRowData.flatRow   = rowData.flatRow;
     visRowData.alternate = (visRowData.flatRow & 1);
     visRowData.depth     = rowData.depth;
-    visRowData.visible   = ! (y1 > visualRect_.bottom() || y2 < visualRect_.top());
+    visRowData.visible   = ! (y1 > vy2 || y2 < vy1);
 
     //---
 
@@ -1979,7 +1986,7 @@ updateVisCells()
 
       //---
 
-      if (hierarchical_ && c == 0) {
+      if (isHierarchical() && c == 0) {
         QModelIndex ind = model_->index(rowData.row, c, rowData.parent);
 
         VisCellData &ivisCellData = ivisCellDatas_[ind];
@@ -2427,8 +2434,10 @@ showMenu(const QPoint &pos)
                    SLOT(stretchLastColumnSlot(bool)));
   addCheckedAction("Multi Header Lines", isMultiHeaderLines(),
                    SLOT(multiHeaderLinesSlot(bool)));
-  addCheckedAction("Root Is Decorated", rootIsDecorated(),
-                   SLOT(rootIsDecoratedSlot(bool)));
+
+  if (isHierarchical())
+    addCheckedAction("Root Is Decorated", rootIsDecorated(),
+                     SLOT(rootIsDecoratedSlot(bool)));
 
   addCheckedAction("Sorting Enabled", isSortingEnabled(),
                    SLOT(sortingEnabledSlot(bool)));
@@ -2462,21 +2471,23 @@ showMenu(const QPoint &pos)
   if (int(visColumnDatas_.size()) != nc_)
     addAction("Show All Columns", SLOT(showAllColumnsSlot()));
 
-  if (mouseData_.menuData.iind.isValid() || mouseData_.menuData.ind.isValid()) {
-    bool expanded = false;
+  if (isHierarchical()) {
+    if (mouseData_.menuData.iind.isValid() || mouseData_.menuData.ind.isValid()) {
+      bool expanded = false;
 
-    if (mouseData_.menuData.iind.isValid())
-      expanded = isExpanded(mouseData_.menuData.iind);
-    else
-      expanded = isExpanded(mouseData_.menuData.ind);
+      if (mouseData_.menuData.iind.isValid())
+        expanded = isExpanded(mouseData_.menuData.iind);
+      else
+        expanded = isExpanded(mouseData_.menuData.ind);
 
-    if (expanded)
-      addAction("Collapse", SLOT(collapseSlot()));
-    else
-      addAction("Expand", SLOT(expandSlot()));
+      if (expanded)
+        addAction("Collapse", SLOT(collapseSlot()));
+      else
+        addAction("Expand", SLOT(expandSlot()));
 
-    addAction("Expand All"  , SLOT(expandAll()));
-    addAction("Collapse All", SLOT(collapseAll()));
+      addAction("Expand All"  , SLOT(expandAll()));
+      addAction("Collapse All", SLOT(collapseAll()));
+    }
   }
 
   if (mouseData_.menuData.hsection >= 0) {
@@ -2906,7 +2917,7 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth, int &nvr, int &
 
     int w = fm_.width(data.toString());
 
-    if (hierarchical_ && column == 0)
+    if (isHierarchical() && column == 0)
       w += (depth + rootIsDecorated())*indentation();
 
     maxWidth = std::max(maxWidth, w);
