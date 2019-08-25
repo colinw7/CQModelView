@@ -25,7 +25,7 @@ class QScrollBar;
  *  . multi-line horizontal header
  *  . vertical/horizontal headers
  *  . frozen columns
- *  . fixed column heights for speed
+ *  . fixed row heights for speed
  *  . fast path when no delegate
  *
  * TODO:
@@ -33,7 +33,6 @@ class QScrollBar;
  *  . paint header section
  *  . multiple freeze columns
  *  . draw sort indicator/column menu
- *  . horizontal scroll range/update
  *  . optional vertical header text (numbers)
  *  . model flags for cell enabled
  *  . show grid (on/off style)
@@ -44,26 +43,39 @@ class QScrollBar;
  *  . items expandable
  *  . expand on double click
  *  . sync header width for expand last for tooltip
+ *  . column header widgets
  *  . persistent model indices
+ *  . select all for hier
  */
 class CQModelView : public QAbstractItemView {
   Q_OBJECT
 
-  Q_PROPERTY(bool freezeFirstColumn   READ isFreezeFirstColumn   WRITE setFreezeFirstColumn  )
+  // new
+  Q_PROPERTY(bool freezeFirstColumn    READ isFreezeFirstColumn   WRITE setFreezeFirstColumn  )
+  Q_PROPERTY(bool stretchLastColumn    READ isStretchLastColumn   WRITE setStretchLastColumn  )
+  Q_PROPERTY(bool multiHeaderLines     READ isMultiHeaderLines    WRITE setMultiHeaderLines   )
+  Q_PROPERTY(bool showVerticalHeader   READ isShowVerticalHeader  WRITE setShowVerticalHeader )
+  Q_PROPERTY(bool showFilter           READ isShowFilter          WRITE setShowFilter         )
 
-  Q_PROPERTY(bool stretchLastColumn   READ isStretchLastColumn   WRITE setStretchLastColumn  )
-  Q_PROPERTY(bool sortingEnabled      READ isSortingEnabled      WRITE setSortingEnabled     )
-  Q_PROPERTY(bool cornerButtonEnabled READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
-  Q_PROPERTY(bool showFilter          READ isShowFilter          WRITE setShowFilter         )
-  Q_PROPERTY(bool indentation         READ indentation           WRITE setIndentation        )
+  // qtableview+qtreeview
+  Q_PROPERTY(bool sortingEnabled       READ isSortingEnabled      WRITE setSortingEnabled     )
+//Q_PROPERTY(bool wordWrap             READ wordWrap              WRITE setWordWrap           )
+
+  // qtableview
+//Q_PROPERTY(bool showGrid             READ showGrid              WRITE setShowGrid           )
+  Q_PROPERTY(bool cornerButtonEnabled  READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
+
+//Q_PROPERTY(Qt::PenStyle gridStyle READ gridStyle WRITE setGridStyle)
 
   // qtreeview
-//Q_PROPERTY(int  autoExpandDelay      READ autoExpandDelay      WRITE setAutoExpandDelay)
-//Q_PROPERTY(bool rootIsDecorated      READ rootIsDecorated      WRITE setRootIsDecorated)
-//Q_PROPERTY(bool itemsExpandable      READ itemsExpandable      WRITE setItemsExpandable)
-//Q_PROPERTY(bool animated             READ isAnimated           WRITE setAnimated)
-//Q_PROPERTY(bool allColumnsShowFocus  READ allColumnsShowFocus  WRITE setAllColumnsShowFocus)
-//Q_PROPERTY(bool wordWrap             READ wordWrap             WRITE setWordWrap)
+//Q_PROPERTY(int  autoExpandDelay      READ autoExpandDelay      WRITE setAutoExpandDelay     )
+  Q_PROPERTY(int  indentation          READ indentation          WRITE setIndentation         )
+  Q_PROPERTY(bool rootIsDecorated      READ rootIsDecorated      WRITE setRootIsDecorated     )
+//Q_PROPERTY(bool uniformRowHeights    READ uniformRowHeights    WRITE setUniformRowHeights   )
+//Q_PROPERTY(bool itemsExpandable      READ itemsExpandable      WRITE setItemsExpandable     )
+//Q_PROPERTY(bool animated             READ isAnimated           WRITE setAnimated            )
+//Q_PROPERTY(bool allColumnsShowFocus  READ allColumnsShowFocus  WRITE setAllColumnsShowFocus )
+//Q_PROPERTY(bool headerHidden         READ isHeaderHidden       WRITE setHeaderHidden        )
 //Q_PROPERTY(bool expandsOnDoubleClick READ expandsOnDoubleClick WRITE setExpandsOnDoubleClick)
 
 
@@ -96,11 +108,22 @@ class CQModelView : public QAbstractItemView {
 
   //---
 
-  bool isStretchLastColumn() const { return stretchLastColumn_; }
-  void setStretchLastColumn(bool b) { stretchLastColumn_ = b; }
-
   bool isFreezeFirstColumn() const { return freezeFirstColumn_; }
-  void setFreezeFirstColumn(bool b) { freezeFirstColumn_ = b; }
+  void setFreezeFirstColumn(bool b);
+
+  bool isStretchLastColumn() const { return stretchLastColumn_; }
+  void setStretchLastColumn(bool b);
+
+  bool isMultiHeaderLines() const { return multiHeaderLines_; }
+  void setMultiHeaderLines(bool b);
+
+  bool isShowVerticalHeader() const { return showVerticalHeader_; }
+  void setShowVerticalHeader(bool b);
+
+  bool isShowFilter() const { return showFilter_; }
+  void setShowFilter(bool b);
+
+  //---
 
   bool isSortingEnabled() const { return sortingEnabled_; }
   void setSortingEnabled(bool b);
@@ -108,11 +131,13 @@ class CQModelView : public QAbstractItemView {
   bool isCornerButtonEnabled() const;
   void setCornerButtonEnabled(bool enable);
 
-  bool isShowFilter() const { return showFilter_; }
-  void setShowFilter(bool b);
+  //---
 
   int indentation() const { return indentation_; }
-  void setIndentation(int i) { indentation_ = i; }
+  void setIndentation(int i);
+
+  bool rootIsDecorated() const { return rootIsDecorated_; }
+  void setRootIsDecorated(bool b);
 
   //---
 
@@ -196,6 +221,7 @@ class CQModelView : public QAbstractItemView {
     int         vsection  { -1 };
     QModelIndex ind;
     QModelIndex iind;
+    QRect       rect;
 
     void reset() {
       hsection  = -1;
@@ -224,6 +250,7 @@ class CQModelView : public QAbstractItemView {
     Text,
     HeaderBg,
     HeaderFg,
+    HeaderLineFg,
     MouseOverBg,
     MouseOverFg,
     HighlightBg,
@@ -253,17 +280,30 @@ class CQModelView : public QAbstractItemView {
     }
   };
 
+  struct VisRowData;
+  struct VisColumnData;
+
+ private:
+  int columnWidth(int column, const VisColumnData &visColumnData) const;
+
   bool hheaderPositionToIndex(PositionData &posData) const;
   bool vheaderPositionToIndex(PositionData &posData) const;
 
   void drawCells(QPainter *painter);
 
+  void drawCellsRows(QPainter *painter) const;
+  void drawCellsSelection(QPainter *painter);
+
   void drawHHeader(QPainter *painter);
-  void drawHHeaderSection(QPainter *painter, int c, int x);
+  void drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData);
 
   void drawVHeader(QPainter *painter);
 
-  void updateVisColumns();
+  void updateRowDatas(); // nvr_, rowDatas_, indRow_
+
+  void updateVisRows();    // visRowDatas_
+  void updateVisColumns(); // nvc_, visColumnDatas_
+  void updateVisCells();   // visCellDatas_
 
   bool isNumericColumn(int c) const;
 
@@ -279,24 +319,25 @@ class CQModelView : public QAbstractItemView {
   void showMenu(const QPoint &pos);
 
   void redraw();
+  void redraw(const QRect &rect);
 
-  void setRolePen  (QPainter *painter, ColorRole role, double alpha=1.0);
-  void setRoleBrush(QPainter *painter, ColorRole role, double alpha=1.0);
+  void setRolePen  (QPainter *painter, ColorRole role, double alpha=1.0) const;
+  void setRoleBrush(QPainter *painter, ColorRole role, double alpha=1.0) const;
 
   const MouseData &mouseData() const { return mouseData_; }
   void setMouseData(const MouseData &data) { mouseData_ = data; }
 
  private:
-  struct VisRowData;
-
   void updateGeometries();
   void updateScrollBars();
 
-  void numVisibleRows(const QModelIndex &parent, int &nvr);
+  void numVisibleRows(const QModelIndex &parent, int &nvr, int depth);
 
-  void drawRow (QPainter *painter, int r, const QModelIndex &parent);
-  void drawCell(QPainter *painter, int r, int c, const QModelIndex &parent, int x,
-                const VisRowData &visRowData);
+  void drawRow(QPainter *painter, int r, const QModelIndex &parent,
+               const VisRowData &visRowData) const;
+
+  void drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
+                const VisRowData &visRowData, const VisColumnData &visColumnData) const;
 
   bool isIndexExpanded(const QModelIndex &index) const;
 
@@ -333,10 +374,15 @@ class CQModelView : public QAbstractItemView {
   void alternatingRowColorsSlot(bool b);
   void freezeFirstColumnSlot   (bool b);
   void stretchLastColumnSlot   (bool b);
+  void multiHeaderLinesSlot    (bool b);
+  void rootIsDecoratedSlot     (bool b);
 
-  void sortingEnabledSlot   (bool b);
+  void sortingEnabledSlot(bool b);
   void sortIncreasingSlot();
   void sortDecreasingSlot();
+
+  void showVerticalHeaderSlot(bool b);
+  void showFilterSlot(bool b);
 
   void hideColumnSlot();
   void showAllColumnsSlot();
@@ -376,21 +422,29 @@ class CQModelView : public QAbstractItemView {
     bool        children { false };
     bool        expanded { true };
     bool        hidden   { false };
+    int         depth    { 0 };
 
-    RowData(const QModelIndex &parent=QModelIndex(), int row=0,
-            int flatRow=0, bool children=false, bool expanded=true) :
-     parent(parent), row(row), flatRow(flatRow), children(children), expanded(expanded) {
+    RowData(const QModelIndex &parent=QModelIndex(), int row=0, int flatRow=0,
+            bool children=false, bool expanded=true, int depth=0) :
+     parent(parent), row(row), flatRow(flatRow), children(children),
+     expanded(expanded), depth(depth) {
     }
   };
 
   struct State {
-    bool updateScrollBars { false };
-    bool updateVisColumns { false };
-    bool updateGeometries { false };
+    bool updateScrollBars { false }; // update scrollbars (new rows, columns)
+    bool updateRowDatas   { false }; // update flat vertical rows (visibility)
+    bool updateVisRows    { false }; // update visible rows (resize, visibility)
+    bool updateVisColumns { false }; // update visible columns (resize, visibility)
+    bool updateVisCells   { false }; // update visible cells (resize, visibility)
+    bool updateGeometries { false }; // update widgets (resize)
 
     void updateAll() {
       updateScrollBars = true;
+      updateRowDatas   = true;
+      updateVisRows    = true;
       updateVisColumns = true;
+      updateVisCells   = true;
       updateGeometries = true;
     }
   };
@@ -398,14 +452,17 @@ class CQModelView : public QAbstractItemView {
   struct VisColumnData {
     QRect rect;
     QRect hrect;
-    bool  first { false };
-    bool  last  { false };
+    bool  first   { false };
+    bool  last    { false };
+    bool  visible { true };
   };
 
   struct VisRowData {
     QRect rect;
-    int   ir        { -1 };
+    int   flatRow   { -1 };
     bool  alternate { false };
+    int   depth     { 0 };
+    bool  visible   { true };
   };
 
   struct VisCellData {
@@ -429,13 +486,12 @@ class CQModelView : public QAbstractItemView {
 
     QSize decorationSize;
     bool  showDecorationSelected { false };
-    int   w                      { 0 };
+    QRect vrect;
+    int   vw                     { 0 };
+    int   vh                     { 0 };
     int   margin                 { 0 };
     int   rowHeight              { 0 };
-    int   vh                     { 0 };
-    int   y                      { 0 };
     int   depth                  { 0 };
-    int   maxDepth               { 0 };
 
     void reset() {
       resetRole();
@@ -458,41 +514,54 @@ class CQModelView : public QAbstractItemView {
   using VisColumnDatas = std::map<int,VisColumnData>;
   using RowVisRowDatas = std::map<int,VisRowData>;
   using VisRowDatas    = std::map<QModelIndex,RowVisRowDatas>;
+  using VisFlatRows    = std::vector<int>;
   using VisCellDatas   = std::map<QModelIndex,VisCellData>;
   using FilterEdits    = std::vector<CQModelViewFilterEdit*>;
   using IndexSet       = std::set<QModelIndex>;
+  using ColumnSpan     = std::pair<int,int>;
+  using ColumnSpans    = std::vector<ColumnSpan>;
+  using RowColumnSpans = std::map<int,ColumnSpans>;
 
   ModelP    model_;
   SelModelP sm_;
   DelegateP delegate_;
 
-  bool freezeFirstColumn_ { false };
-  bool stretchLastColumn_ { false };
-  bool sortingEnabled_    { false };
-  bool showFilter_        { false };
-  int  indentation_       { 20 };
+  bool freezeFirstColumn_  { false };
+  bool stretchLastColumn_  { false };
+  bool multiHeaderLines_   { false };
+  bool showVerticalHeader_ { true };
+  bool showFilter_         { false };
+
+  bool sortingEnabled_     { false };
+
+  int  indentation_        { 20 };
+  bool rootIsDecorated_    { true };
 
   CQModelViewCornerButton *cornerWidget_ { nullptr };
 
-  GlobalColumnData globalColumnData_; // global column data
-  ColumnDatas      columnDatas_;      // per column data
+  GlobalColumnData  globalColumnData_; // global column data
+  ColumnDatas       columnDatas_;      // per column data
 
-  GlobalRowData    globalRowData_;    // global row data
-  RowDatas         rowDatas_;         // per row data
-  IndRow           indRow_;           // index to visual row
+  GlobalRowData     globalRowData_;    // global row data
+  RowDatas          rowDatas_;         // per row data
+  IndRow            indRow_;           // index to visual row
+  RowColumnSpans    rowColumnSpans_;   // per header row column spans
 
-  State            state_;            // state
+  State             state_;            // state
 
-  ScrollData       scrollData_;       // scroll data (updateScrollBars)
-  VisColumnDatas   visColumnDatas_;   // vis column data (updateVisibleColumns)
-  VisRowDatas      visRowDatas_;
-  VisCellDatas     visCellDatas_;
-  VisCellDatas     ivisCellDatas_;
-  PaintData        paintData_;
-  MouseData        mouseData_;
-  FilterEdits      filterEdits_;
-  bool             hierarchical_ { false };
-  IndexSet         collapsed_;
+  ScrollData        scrollData_;       // scroll data (updateScrollBars)
+  VisColumnDatas    visColumnDatas_;   // vis column data (updateVisibleColumns)
+  VisRowDatas       visRowDatas_;      // vis row data (updateVisRows)
+  VisFlatRows       visFlatRows_;      // visible rows (flat index)
+  VisCellDatas      visCellDatas_;     // vis cell data (updateVisCells)
+  VisCellDatas      ivisCellDatas_;    // vis tree cell data (updateVisCells)
+  mutable PaintData paintData_;
+  MouseData         mouseData_;
+  FilterEdits       filterEdits_;
+  bool              hierarchical_ { false };
+  int               freezeColumn_ { -1 };
+  int               freezeWidth_  { 0 };
+  IndexSet          collapsed_;
 
   // widgets
   CQModelViewHeader* vh_ { nullptr };
@@ -508,6 +577,8 @@ class CQModelView : public QAbstractItemView {
   int          nc_  { 0 };
   int          nvr_ { 0 };
   int          nvc_ { 0 };
+  QRect        visualRect_;
+  QRect        paintRect_;
   QFontMetrics fm_;
 };
 
