@@ -1,7 +1,13 @@
 #include <CQItemDelegate.h>
 #include <CQBaseModelTypes.h>
+
 #include <QAbstractItemView>
+#include <QLineEdit>
+#include <QLayout>
 #include <QPainter>
+#include <QEvent>
+
+#include <cassert>
 
 #include <svg/edit_item_svg.h>
 
@@ -204,4 +210,66 @@ drawEditImage(QPainter *painter, const QRect &rect, bool numeric) const
     rect1 = QRect(rect.right() - image.width() - 2, rect.top() + dy, image.width(), image.height());
 
   painter->drawImage(rect1, image);
+}
+
+bool
+CQItemDelegate::
+isNumericColumn(int column) const
+{
+  QAbstractItemModel *model = view_->model();
+  if (! model) return false;
+
+  CQBaseModelType type = CQBaseModelType::STRING;
+
+  QVariant tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::Type);
+
+  if (! tvar.isValid())
+    tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::BaseType);
+
+  if (! tvar.isValid())
+    return false;
+
+  bool ok;
+  type = (CQBaseModelType) tvar.toInt(&ok);
+  if (! ok) return false;
+
+  //---
+
+  return (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER);
+}
+
+QWidget *
+CQItemDelegate::
+createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &index) const
+{
+  QWidget *w;
+
+  if (isNumericColumn(index.column()))
+    w = new QLineEdit(parent);
+  else
+    w = new QLineEdit(parent);
+
+  assert(w);
+
+  w->updateGeometry();
+
+  if (w->layout())
+    w->layout()->invalidate();
+
+  CQItemDelegate *th = const_cast<CQItemDelegate *>(this);
+
+  w->installEventFilter(th);
+
+  th->editor_      = w;
+  th->editing_     = true;
+  th->editorIndex_ = index;
+
+  return w;
+}
+
+bool
+CQItemDelegate::
+eventFilter(QObject *obj, QEvent *event)
+{
+  return QObject::eventFilter(obj, event);
 }

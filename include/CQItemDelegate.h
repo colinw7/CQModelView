@@ -2,6 +2,7 @@
 #define CQItemDelegate_H
 
 #include <QItemDelegate>
+#include <QPointer>
 
 class QAbstractItemView;
 
@@ -23,6 +24,11 @@ class CQItemDelegate : public QItemDelegate {
   void paint(QPainter *painter, const QStyleOptionViewItem &option,
              const QModelIndex &index) const override;
 
+  bool isNumericColumn(int column) const;
+
+  QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                        const QModelIndex &index) const override;
+
  private:
   bool drawType(QPainter *painter, const QStyleOptionViewItem &option,
                 const QModelIndex &index) const;
@@ -32,11 +38,18 @@ class CQItemDelegate : public QItemDelegate {
 
   void drawEditImage(QPainter *painter, const QRect &rect, bool numeric) const;
 
+  bool eventFilter(QObject *obj, QEvent *event) override;
+
  private:
-  QAbstractItemView *view_        { nullptr };
-  bool               heatmap_     { false };
-  mutable bool       isEditable_  { false };
-  mutable bool       isMouseOver_ { false };
+  using WidgetP = QPointer<QWidget>;
+
+  QAbstractItemView* view_        { nullptr }; //!< parent view
+  bool               heatmap_     { false };   //!< is heatmap enabled
+  mutable bool       isEditable_  { false };   //!< is editable
+  mutable bool       isMouseOver_ { false };   //!< is mouse over
+  WidgetP            editor_;                  //!< current editor
+  bool               editing_     { false };   //!< is editing
+  QModelIndex        editorIndex_;             //!< editor model index
 };
 
 #endif

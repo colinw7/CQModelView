@@ -3,7 +3,9 @@
 #include <CQItemDelegate.h>
 #include <CQCsvModel.h>
 #include <CQJsonModel.h>
-//#include <CQPerfMonitor.h>
+#ifdef CQ_MODEL_VIEW_TRACE
+#include <CQPerfMonitor.h>
+#endif
 #include <CArgs.h>
 
 #include <QApplication>
@@ -12,9 +14,8 @@
 #include <QSortFilterProxyModel>
 #include <QItemSelectionModel>
 #include <QTextEdit>
+#include <QLabel>
 #include <QTimer>
-
-//#define CQ_MODEL_VIEW_TRACE 1
 
 int
 main(int argc, char **argv)
@@ -70,10 +71,24 @@ main(int argc, char **argv)
 CQModelViewTest::
 CQModelViewTest()
 {
-  QHBoxLayout *layout = new QHBoxLayout(this);
+  QVBoxLayout *layout = new QVBoxLayout(this);
   layout->setMargin(2); layout->setSpacing(2);
 
+  //---
+
+  QFrame *viewFrame = new QFrame;
+  viewFrame->setObjectName("viewFrame");
+
+  QHBoxLayout *viewLayout = new QHBoxLayout(viewFrame);
+  viewLayout->setMargin(2); viewLayout->setSpacing(2);
+
+  layout->addWidget(viewFrame);
+
+  //---
+
+  // model view
   view_ = new CQModelView(this);
+  view_->setObjectName("modelView");
 
   view_->setAlternatingRowColors(true);
 
@@ -83,11 +98,15 @@ CQModelViewTest()
 
   view_->setItemDelegate(delegate_);
 
-  layout->addWidget(view_);
+  viewLayout->addWidget(view_);
+
+  connect(view_, SIGNAL(stateChanged()), this, SLOT(updateState()));
 
   //---
 
+  // tree view
   qview_ = new QTreeView(this);
+  qview_->setObjectName("treeView");
 
   qview_->setAlternatingRowColors(true);
 
@@ -97,13 +116,36 @@ CQModelViewTest()
 
   qview_->setItemDelegate(delegate_);
 
-  layout->addWidget(qview_);
+  viewLayout->addWidget(qview_);
 
   //---
 
+  // stats
   stats_ = new CQModelViewStats(view_);
+  stats_->setObjectName("stats");
 
-  layout->addWidget(stats_);
+  viewLayout->addWidget(stats_);
+
+  //---
+
+  QFrame *statusFrame = new QFrame;
+  statusFrame->setObjectName("statusFrame");
+
+  QHBoxLayout *statusLayout = new QHBoxLayout(statusFrame);
+  statusLayout->setMargin(2); statusLayout->setSpacing(2);
+
+  statusFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+  //---
+
+  statusLabel_ = new QLabel;
+  statusLabel_->setText(" ");
+
+  statusLayout->addWidget(statusLabel_);
+
+  //---
+
+  layout->addWidget(statusFrame);
 }
 
 CQModelViewTest::
@@ -163,10 +205,32 @@ load(const QString &filename)
 
 void
 CQModelViewTest::
-updateState()
+updateVisibleState()
 {
   qview_->setVisible(isShowTree());
   stats_->setVisible(isShowStats());
+}
+
+void
+CQModelViewTest::
+updateState()
+{
+  int nr = view_->numModelRows();
+  int nv = view_->numVisibleRows();
+
+  QString str = QString("%1 Rows, %2 Visible Rows").arg(nr).arg(nv);
+
+  statusLabel_->setText(str);
+}
+
+QSize
+CQModelViewTest::
+sizeHint() const
+{
+  if (isShowStats())
+   return QSize(1200, 800);
+  else
+   return QSize(800, 800);
 }
 
 //------
@@ -183,9 +247,11 @@ CQModelViewStats(CQModelView *view) :
 
   timer_ = new QTimer(this);
 
+#ifdef CQ_MODEL_VIEW_TRACE
   connect(timer_, SIGNAL(timeout()), this, SLOT(updateSlot()));
 
   timer_->start(500);
+#endif
 }
 
 void
@@ -204,6 +270,8 @@ updateSlot()
 
     str += QString("%1 %2 (#%3)").arg(trace->name()).arg(t).arg(n);
   };
+
+  str += QString("\nNum Redraws %1").arg(view_->numRedraws());
 
   CQPerfMonitor::TraceList traces;
 

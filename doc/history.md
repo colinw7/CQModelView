@@ -8,3 +8,9 @@
  + Improve updates
 ## 8/18/2019
  + Add hierarchical tree support
+## 9/1/2019
+ + hierarcal fixes
+   + selection rendering
+   + select all
+   + root index
+   + keyboard search

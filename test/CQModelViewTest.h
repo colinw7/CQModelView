@@ -10,6 +10,7 @@ class QAbstractItemModel;
 class CQItemDelegate;
 class QTreeView;
 class QSortFilterProxyModel;
+class QLabel;
 
 class CQModelViewTest : public QFrame {
   Q_OBJECT
@@ -28,15 +29,18 @@ class CQModelViewTest : public QFrame {
   void setFirstColumnHeader(bool b) { firstColumnHeader_ = b; }
 
   bool isShowStats() const { return showStats_; }
-  void setShowStats(bool b) { showStats_ = b;  updateState(); }
+  void setShowStats(bool b) { showStats_ = b;  updateVisibleState(); }
 
   bool isShowTree() const { return showTree_; }
-  void setShowTree(bool b) { showTree_ = b; updateState(); }
+  void setShowTree(bool b) { showTree_ = b; updateVisibleState(); }
 
   void load(const QString &filename);
 
-  QSize sizeHint() const override { return QSize(800, 600); }
+  QSize sizeHint() const override;
 
+  void updateVisibleState();
+
+ private slots:
   void updateState();
 
  private:
@@ -48,6 +52,7 @@ class CQModelViewTest : public QFrame {
   CQModelView*           view_              { nullptr };
   CQModelViewStats*      stats_             { nullptr };
   QTreeView*             qview_             { nullptr };
+  QLabel*                statusLabel_       { nullptr };
   QAbstractItemModel*    model_             { nullptr };
   QSortFilterProxyModel* proxyModel_        { nullptr };
   CQItemDelegate*        delegate_          { nullptr };
