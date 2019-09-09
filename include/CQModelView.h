@@ -35,7 +35,6 @@ class QScrollBar;
  *  . column menu
  *  . optional vertical header text (numbers, debug info)
  *  . model flags for cell enabled
- *  . show grid (on/off style)
  *  . auto expand delay (timer)
  *  . items expandable
  *  . expand on double click
@@ -47,6 +46,7 @@ class QScrollBar;
  *  . optimized draw/damage rect
  *  . word wrap
  *  . keyboard search multiple characters
+ *  . style hints
  */
 class CQModelView : public QAbstractItemView {
   Q_OBJECT
@@ -63,10 +63,10 @@ class CQModelView : public QAbstractItemView {
 //Q_PROPERTY(bool wordWrap             READ wordWrap              WRITE setWordWrap           )
 
   // qtableview
-//Q_PROPERTY(bool showGrid             READ showGrid              WRITE setShowGrid           )
+  Q_PROPERTY(bool showGrid             READ showGrid              WRITE setShowGrid           )
   Q_PROPERTY(bool cornerButtonEnabled  READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
 
-//Q_PROPERTY(Qt::PenStyle gridStyle READ gridStyle WRITE setGridStyle)
+  Q_PROPERTY(Qt::PenStyle gridStyle READ gridStyle WRITE setGridStyle)
 
   // qtreeview
 //Q_PROPERTY(int  autoExpandDelay      READ autoExpandDelay      WRITE setAutoExpandDelay     )
@@ -76,7 +76,7 @@ class CQModelView : public QAbstractItemView {
 //Q_PROPERTY(bool itemsExpandable      READ itemsExpandable      WRITE setItemsExpandable     )
 //Q_PROPERTY(bool animated             READ isAnimated           WRITE setAnimated            )
 //Q_PROPERTY(bool allColumnsShowFocus  READ allColumnsShowFocus  WRITE setAllColumnsShowFocus )
-//Q_PROPERTY(bool expandsOnDoubleClick READ expandsOnDoubleClick WRITE setExpandsOnDoubleClick)
+  Q_PROPERTY(bool expandsOnDoubleClick READ expandsOnDoubleClick WRITE setExpandsOnDoubleClick)
 
  public:
   CQModelView(QWidget *parent=nullptr);
@@ -173,6 +173,12 @@ class CQModelView : public QAbstractItemView {
   bool isSortingEnabled() const { return sortingEnabled_; }
   void setSortingEnabled(bool b);
 
+  bool showGrid() const { return showGrid_; }
+  void setShowGrid(bool b);
+
+  const Qt::PenStyle &gridStyle() const { return gridStyle_; }
+  void setGridStyle(const Qt::PenStyle &s) { gridStyle_ = s; }
+
   bool isCornerButtonEnabled() const;
   void setCornerButtonEnabled(bool enable);
 
@@ -183,6 +189,9 @@ class CQModelView : public QAbstractItemView {
 
   bool rootIsDecorated() const { return rootIsDecorated_; }
   void setRootIsDecorated(bool b);
+
+  bool expandsOnDoubleClick() const { return expandsOnDoubleClick_; }
+  void setExpandsOnDoubleClick(bool b) { expandsOnDoubleClick_ = b; }
 
   //---
 
@@ -281,6 +290,7 @@ class CQModelView : public QAbstractItemView {
     int         vsection  { -1 };
     QModelIndex ind;
     QModelIndex iind;
+    int         flatRow   { -1 };
     QRect       rect;
 
     void reset() {
@@ -327,6 +337,7 @@ class CQModelView : public QAbstractItemView {
   enum class ColorRole {
     None,
     Window,
+    Base,
     Text,
     HeaderBg,
     HeaderFg,
@@ -338,7 +349,8 @@ class CQModelView : public QAbstractItemView {
     AlternateBg,
     AlternateFg,
     SelectionBg,
-    SelectionFg
+    SelectionFg,
+    GridFg
   };
 
   struct MouseData {
@@ -369,10 +381,16 @@ class CQModelView : public QAbstractItemView {
   bool hheaderPositionToIndex(PositionData &posData) const;
   bool vheaderPositionToIndex(PositionData &posData) const;
 
+  void initDrawGrid() const;
+
   void drawCells(QPainter *painter) const;
 
   void drawCellsRows(QPainter *painter) const;
   void drawCellsSelection(QPainter *painter) const;
+
+  void drawAlternateEmpty(QPainter *painter);
+
+  void drawGrid(QPainter *painter);
 
   void drawHHeader(QPainter *painter) const;
   void drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData) const;
@@ -557,7 +575,7 @@ class CQModelView : public QAbstractItemView {
     int   flatRow       { -1 };
     int   r             { -1 };
     int   nr            { -1 };
-    QRect rect;
+    QRect rect;                    // vertical header rect
     bool  alternate     { false };
     bool  children      { false };
     bool  expanded      { true };
@@ -585,11 +603,17 @@ class CQModelView : public QAbstractItemView {
   using RoleColors = std::map<ColorRole,QColor>;
 
   struct PaintData {
-    ColorRole  penRole    = ColorRole::Text;
-    double     penAlpha   = 1.0;
-    ColorRole  brushRole  = ColorRole::Window;
-    double     brushAlpha = 1.0;
-    RoleColors roleColors;
+    PaintData(CQModelView *view) :
+     fm(view->font()) {
+    }
+
+    ColorRole    penRole    = ColorRole::Text;
+    double       penAlpha   = 1.0;
+    ColorRole    brushRole  = ColorRole::Window;
+    double       brushAlpha = 1.0;
+    RoleColors   roleColors;
+    QFontMetrics fm;
+    QPen         gridPen;
 
     QSize decorationSize;
     bool  showDecorationSelected { false };
@@ -618,9 +642,9 @@ class CQModelView : public QAbstractItemView {
   using ColumnDatas        = std::vector<ColumnData>;
   using RowDatas           = std::map<int,RowData>;
   using IndRow             = std::map<QModelIndex,int>;
-  using VisColumnDatas     = std::map<int,VisColumnData>;
-  using RowVisRowDatas     = std::map<int,VisRowData>;
-  using VisRowDatas        = std::map<QModelIndex,RowVisRowDatas>;
+  using VisColumnDatas     = std::map<int,VisColumnData>;          // column data
+  using RowVisRowDatas     = std::map<int,VisRowData>;             // row data
+  using VisRowDatas        = std::map<QModelIndex,RowVisRowDatas>; // parent rows
   using VisFlatRows        = std::vector<int>;
   using VisCellDatas       = std::map<QModelIndex,VisCellData>;
   using FilterEdits        = std::vector<CQModelViewFilterEdit*>;
@@ -644,8 +668,12 @@ class CQModelView : public QAbstractItemView {
 
   bool sortingEnabled_     { false };
 
-  int  indentation_        { 20 };
-  bool rootIsDecorated_    { true };
+  bool         showGrid_   { false };
+  Qt::PenStyle gridStyle_  { Qt::SolidLine };
+
+  int  indentation_          { 20 };
+  bool rootIsDecorated_      { true };
+  bool expandsOnDoubleClick_ { true };
 
   CQModelViewCornerButton *cornerWidget_ { nullptr };
 
@@ -665,6 +693,7 @@ class CQModelView : public QAbstractItemView {
   VisFlatRows       visFlatRows_;      // visible rows (flat index)
   VisCellDatas      visCellDatas_;     // vis cell data (updateVisCells)
   VisCellDatas      ivisCellDatas_;    // vis tree cell data (updateVisCells)
+  int               currentFlatRow_ { -1 };
 
   DepthHierCellAreas selDepthHierCellAreas_;
 
@@ -690,51 +719,14 @@ class CQModelView : public QAbstractItemView {
   QItemSelectionModel *hsm_ { nullptr };
 
   // draw data
-  int          nr_  { 0 };
-  int          nc_  { 0 };
-  int          nmr_ { 0 };
-  int          nvr_ { 0 };
-  int          nvc_ { 0 };
-  QRect        visualRect_;
-  int          visualBorderRows_ { 3 };
-  QRect        paintRect_;
-  QFontMetrics fm_;
-};
-
-//---
-
-class CQModelViewHeader : public QHeaderView {
-  Q_OBJECT
-
- public:
-  CQModelViewHeader(Qt::Orientation orient, CQModelView *view);
-
-  //---
-
-  void resizeEvent(QResizeEvent *) override;
-
-  void paintEvent(QPaintEvent *) override;
-
-  void mousePressEvent  (QMouseEvent *e) override;
-  void mouseMoveEvent   (QMouseEvent *e) override;
-  void mouseReleaseEvent(QMouseEvent *e) override;
-
-  void mouseDoubleClickEvent(QMouseEvent *e) override;
-
-  void keyPressEvent(QKeyEvent *e) override;
-
-  void leaveEvent(QEvent *) override;
-
-  void contextMenuEvent(QContextMenuEvent *e) override;
-
-  //---
-
-  void redraw();
-
-  QSize sizeHint() const override { return QSize(100, 100); }
-
- private:
-  CQModelView* view_ { nullptr };
+  int   nr_  { 0 };
+  int   nc_  { 0 };
+  int   nmr_ { 0 };
+  int   nvr_ { 0 };
+  int   nvc_ { 0 };
+  QRect visualRect_;
+  int   visualBorderRows_ { 3 };
+  QRect paintRect_;
 };
 
 //---

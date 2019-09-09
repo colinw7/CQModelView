@@ -11,9 +11,11 @@
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QTreeView>
+#include <QTableView>
 #include <QSortFilterProxyModel>
 #include <QItemSelectionModel>
 #include <QTextEdit>
+#include <QCheckBox>
 #include <QLabel>
 #include <QTimer>
 
@@ -30,7 +32,8 @@ main(int argc, char **argv)
              "-first_line_header:b   (First Line Header) "
              "-first_column_header:b (First Column Header) "
              "-stats:b               (Show Stats) "
-             "-tree:b                (Show QTreeView)");
+             "-tree:b                (Show QTreeView) "
+             "-table:b               (Show QableView)");
 
   args.parse(&argc, argv);
 
@@ -39,6 +42,7 @@ main(int argc, char **argv)
   bool first_column_header = args.getArg<bool>("-first_column_header");
   bool showStats           = args.getArg<bool>("-stats");
   bool showTree            = args.getArg<bool>("-tree");
+  bool showTable           = args.getArg<bool>("-table");
 
   std::vector<QString> filenames;
 
@@ -58,6 +62,7 @@ main(int argc, char **argv)
 
   test->setShowStats(showStats);
   test->setShowTree (showTree);
+  test->setShowTable(showTable);
 
   test->load(filenames[0]);
 
@@ -91,8 +96,8 @@ CQModelViewTest()
   view_->setObjectName("modelView");
 
   view_->setAlternatingRowColors(true);
-
   view_->setStretchLastColumn(true);
+  view_->setShowGrid(false);
 
   delegate_ = new CQItemDelegate(view_);
 
@@ -105,18 +110,36 @@ CQModelViewTest()
   //---
 
   // tree view
-  qview_ = new QTreeView(this);
-  qview_->setObjectName("treeView");
+  tree_ = new QTreeView(this);
+  tree_->setObjectName("treeView");
 
-  qview_->setAlternatingRowColors(true);
+  tree_->setSelectionBehavior(QAbstractItemView::SelectItems);
+  tree_->setAlternatingRowColors(true);
+//tree_->setShowGrid(state);
+//tree_->setStretchLastColumn(true);
 
-//qview_->setStretchLastColumn(true);
+  delegate_ = new CQItemDelegate(tree_);
 
-  delegate_ = new CQItemDelegate(qview_);
+  tree_->setItemDelegate(delegate_);
 
-  qview_->setItemDelegate(delegate_);
+  viewLayout->addWidget(tree_);
 
-  viewLayout->addWidget(qview_);
+  //---
+
+  // tree view
+  table_ = new QTableView(this);
+  table_->setObjectName("tableView");
+
+  table_->setSelectionBehavior(QAbstractItemView::SelectItems);
+  table_->setAlternatingRowColors(true);
+  table_->setShowGrid(false);
+//table_->setStretchLastColumn(true);
+
+  delegate_ = new CQItemDelegate(table_);
+
+  table_->setItemDelegate(delegate_);
+
+  viewLayout->addWidget(table_);
 
   //---
 
@@ -143,6 +166,12 @@ CQModelViewTest()
 
   statusLayout->addWidget(statusLabel_);
 
+  QCheckBox *gridCheck = new QCheckBox("Grid");
+
+  statusLayout->addWidget(gridCheck);
+
+  connect(gridCheck, SIGNAL(stateChanged(int)), this, SLOT(gridSlot(int)));
+
   //---
 
   layout->addWidget(statusFrame);
@@ -152,6 +181,15 @@ CQModelViewTest::
 ~CQModelViewTest()
 {
   delete model_;
+}
+
+void
+CQModelViewTest::
+gridSlot(int state)
+{
+  view_ ->setShowGrid(state);
+  table_->setShowGrid(state);
+//tree_ ->setShowGrid(state);
 }
 
 void
@@ -167,7 +205,7 @@ load(const QString &filename)
 
     model_ = model;
 
-    //model->setReadOnly(false);
+    model->setReadOnly(false);
 
     model->load(filename);
   }
@@ -200,14 +238,16 @@ load(const QString &filename)
   proxyModel_->setSortRole(Qt::EditRole);
 
   view_ ->setModel(proxyModel_);
-  qview_->setModel(proxyModel_);
+  tree_ ->setModel(proxyModel_);
+  table_->setModel(proxyModel_);
 }
 
 void
 CQModelViewTest::
 updateVisibleState()
 {
-  qview_->setVisible(isShowTree());
+  tree_ ->setVisible(isShowTree());
+  table_->setVisible(isShowTable());
   stats_->setVisible(isShowStats());
 }
 
@@ -227,10 +267,18 @@ QSize
 CQModelViewTest::
 sizeHint() const
 {
+  int width = 800;
+
   if (isShowStats())
-   return QSize(1200, 800);
-  else
-   return QSize(800, 800);
+    width += 400;
+
+  if (isShowTree())
+    width += 400;
+
+  if (isShowTable())
+    width += 400;
+
+  return QSize(width, 800);
 }
 
 //------

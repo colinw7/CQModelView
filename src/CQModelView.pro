@@ -14,10 +14,12 @@ MOC_DIR = .moc
 
 SOURCES += \
 CQModelView.cpp \
+CQModelViewHeader.cpp \
 CQItemDelegate.cpp \
 
 HEADERS += \
 ../include/CQModelView.h \
+../include/CQModelViewHeader.h \
 ../include/CQItemDelegate.h \
 ../include/CQBaseModelTypes.h \
 

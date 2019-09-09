@@ -1,4 +1,5 @@
 #include <CQModelView.h>
+#include <CQModelViewHeader.h>
 #include <CQBaseModelTypes.h>
 #include <CQItemDelegate.h>
 #ifdef CQ_MODEL_VIEW_TRACE
@@ -27,7 +28,7 @@
 
 CQModelView::
 CQModelView(QWidget *parent) :
- QAbstractItemView(parent), fm_(font())
+ QAbstractItemView(parent), paintData_(this)
 {
   setObjectName("modelView");
 
@@ -262,7 +263,9 @@ void
 CQModelView::
 reset()
 {
-  std::cerr << "CQModelView::reset\n";
+  //std::cerr << "CQModelView::reset\n";
+
+  state_.updateAll();
 
   QAbstractItemView::reset();
 }
@@ -633,6 +636,15 @@ setSortingEnabled(bool b)
   }
 }
 
+void
+CQModelView::
+setShowGrid(bool b)
+{
+  showGrid_ = b;
+
+  redraw();
+}
+
 //---
 
 bool
@@ -756,7 +768,7 @@ updateWidgetGeometries()
 
   //---
 
-  int fh = fm_.height();
+  int fh = paintData_.fm.height();
 
   globalRowData_.headerHeight = 0;
 
@@ -844,7 +856,7 @@ updateWidgetGeometries()
   //---
 
   globalRowData_   .headerHeight = ncr*(fh + 1) + 2*globalRowData_.margin;
-  globalColumnData_.headerWidth  = fm_.width("X") + 4;
+  globalColumnData_.headerWidth  = paintData_.fm.width("X") + 4;
   globalRowData_   .height       = fh + globalRowData_.margin;
 
   // space for headers
@@ -1022,6 +1034,10 @@ updateCurrentIndices()
 
     hsm_->setCurrentIndex(hind, QItemSelectionModel::NoUpdate);
     vsm_->setCurrentIndex(vind, QItemSelectionModel::NoUpdate);
+
+    auto p = (vsm_->currentIndex().isValid() ? indRow_.find(vsm_->currentIndex()) : indRow_.end());
+
+    currentFlatRow_ = (p != indRow_.end() ? (*p).second : -1);
   }
   else {
     hsm_->clearCurrentIndex();
@@ -1088,18 +1104,20 @@ paintEvent(QPaintEvent *e)
 
   //---
 
-  QColor c = palette().color(QPalette::Window);
+  QColor c = palette().color(QPalette::Base);
 
   painter.fillRect(viewport()->rect(), c);
 
   //---
 
-  fm_ = QFontMetrics(font());
+  paintData_.fm = QFontMetrics(font());
 
   //---
 
+#if 0
   int nr = nr_;
   int nc = nc_;
+#endif
 
   if (model_) {
     QModelIndex parent = rootIndex();
@@ -1118,13 +1136,131 @@ paintEvent(QPaintEvent *e)
 
   //---
 
+#if 0
   // TODO: needed, model signals should handle this
   if (! state_.updateScrollBars)
     state_.updateScrollBars = (nc_ != nc || nr_ !=  nr);
+#endif
+
+  //---
+
+  if (showGrid())
+    initDrawGrid();
 
   //---
 
   drawCells(&painter);
+
+  //---
+
+  drawAlternateEmpty(&painter);
+
+  //---
+
+  if (showGrid())
+    drawGrid(&painter);
+}
+
+void
+CQModelView::
+drawAlternateEmpty(QPainter *painter)
+{
+  QStyleOptionViewItem opt;
+
+  bool alternateEmpty =
+    style()->styleHint(QStyle::SH_ItemView_PaintAlternatingRowColorsForEmptyArea, &opt, this);
+
+  if (alternateEmpty) {
+    int alternate = 0;
+
+    if (nvr_ > 0) {
+      int flatRow = visFlatRows_.back();
+
+      auto pr = rowDatas_.find(flatRow);
+      assert(pr != rowDatas_.end());
+
+      const RowData &rowData = (*pr).second;
+
+      //---
+
+      auto pp = visRowDatas_.find(rowData.parent);
+      assert(pp != visRowDatas_.end());
+
+      const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+
+      auto ppr = rowVisRowDatas.find(rowData.row);
+      assert(ppr != rowVisRowDatas.end());
+
+      const VisRowData &visRowData = (*ppr).second;
+
+      alternate = (visRowData.flatRow & 1);
+    }
+
+    int y = nvr_*paintData_.rowHeight;
+
+    while (y < paintData_.vh) {
+      alternate = 1 - alternate;
+
+      if (alternate)
+        setRoleBrush(painter, ColorRole::AlternateBg);
+      else
+        setRoleBrush(painter, ColorRole::Base);
+
+      opt.rect = QRect(0, y, paintData_.vw, paintData_.rowHeight);
+
+      painter->fillRect(opt.rect, painter->brush());
+
+      y += paintData_.rowHeight;
+    }
+  }
+}
+
+void
+CQModelView::
+initDrawGrid() const
+{
+  QStyleOptionViewItem option;
+
+  int gridHint = style()->styleHint(QStyle::SH_Table_GridLineColor, &option, this);
+
+  const QColor gridColor = static_cast<QRgb>(gridHint);
+
+  paintData_.gridPen = QPen(gridColor, 0, gridStyle());
+}
+
+void
+CQModelView::
+drawGrid(QPainter *painter)
+{
+  setRolePen(painter, ColorRole::GridFg);
+
+  for (const auto &pp : visRowDatas_) {
+    const RowVisRowDatas &rowVisRowDatas = pp.second;
+
+    for (const auto &pr : rowVisRowDatas) {
+      const VisRowData &visRowData = pr.second;
+
+      int x1 = visRowData.rect.left();
+//    int y1 = visRowData.rect.top();
+      int y2 = visRowData.rect.bottom();
+
+      painter->drawLine(x1, y2, paintData_.vw - x1, y2);
+    }
+  }
+
+  int y1 = 0;
+
+  for (const auto &pv : visColumnDatas_) {
+    const VisColumnData &visColumnData = pv.second;
+
+    if (! visColumnData.visible)
+      continue;
+
+//  int x1 = visColumnData.rect.left ();
+    int x2 = visColumnData.rect.right();
+
+    painter->drawLine(x2, y1, x2, paintData_.vh - y1);
+  }
 }
 
 void
@@ -1451,6 +1587,9 @@ drawHHeader(QPainter *painter) const
   paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
+  if (showGrid())
+    initDrawGrid();
+
   //---
 
   painter->fillRect(paintData_.vrect, roleColor(ColorRole::HeaderBg));
@@ -1505,7 +1644,7 @@ drawHHeader(QPainter *painter) const
 
   // draw span text
   if (isMultiHeaderLines()) {
-    int fh = fm_.height();
+    int fh = paintData_.fm.height();
 
     for (const auto &pr : rowColumnSpans_) {
       int                r           = pr.first;
@@ -1547,7 +1686,7 @@ drawHHeader(QPainter *painter) const
         setRolePen(painter, ColorRole::HeaderLineFg);
 
         painter->drawLine(visColumnData2.rect.topRight  (), visColumnData2.rect.bottomRight());
-        painter->drawLine(rect.bottomLeft(), rect.bottomRight());
+        painter->drawLine(               rect.bottomLeft(),                rect.bottomRight());
       }
     }
   }
@@ -1686,7 +1825,7 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
   //---
 
   if (ns > 1) {
-    int fh = fm_.height();
+    int fh = paintData_.fm.height();
 
     for (int r = 0; r < ns; ++r) {
       bool inSpan = false;
@@ -1784,6 +1923,14 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
 
   //---
 
+  if (showGrid()) {
+    setRolePen(painter, ColorRole::GridFg);
+
+    painter->drawLine(option.rect.topRight(), option.rect.bottomRight());
+  }
+
+  //---
+
   if (option.state & QStyle::State_HasFocus)
     drawFocus();
 
@@ -1844,6 +1991,9 @@ drawVHeader(QPainter *painter) const
   paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
+  if (showGrid())
+    initDrawGrid();
+
   //---
 
   painter->fillRect(paintData_.vrect, roleColor(ColorRole::HeaderBg));
@@ -1854,6 +2004,7 @@ drawVHeader(QPainter *painter) const
 
   int currentRow = (p != indRow_.end() ? (*p).second : -1);
 
+  // draw header area for each visible flat row
   for (const auto &flatRow : visFlatRows_) {
     auto pr = rowDatas_.find(flatRow);
     assert(pr != rowDatas_.end());
@@ -1913,7 +2064,7 @@ drawVHeader(QPainter *painter) const
 
       painter->fillRect(option.rect, painter->brush());
 
-      setRoleBrush(painter, ColorRole::Window);
+      setRoleBrush(painter, ColorRole::Base);
     };
 
     auto drawFocus = [&]() {
@@ -1954,6 +2105,18 @@ drawVHeader(QPainter *painter) const
 
     if (option.state & QStyle::State_Selected)
       drawSelection();
+
+    //---
+
+    if (showGrid()) {
+      setRolePen(painter, ColorRole::GridFg);
+
+      int x1 = option.rect.left  ();
+      int x2 = option.rect.right ();
+      int y2 = option.rect.bottom();
+
+      painter->drawLine(x1, y2 - 1, x2, y2 - 1);
+    }
   }
 }
 
@@ -2073,7 +2236,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
         if (opt.features & QStyleOptionViewItem::Alternate)
           setRoleBrush(painter, ColorRole::AlternateBg);
         else
-          setRoleBrush(painter, ColorRole::Window);
+          setRoleBrush(painter, ColorRole::Base);
       }
 
       painter->fillRect(opt.rect, painter->brush());
@@ -2081,7 +2244,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
       if (opt.features & QStyleOptionViewItem::Alternate)
         setRoleBrush(painter, ColorRole::AlternateBg);
       else
-        setRoleBrush(painter, ColorRole::Window);
+        setRoleBrush(painter, ColorRole::Base);
     };
 
     //---
@@ -2147,7 +2310,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
       if (option.features & QStyleOptionViewItem::Alternate)
         setRoleBrush(painter, ColorRole::AlternateBg);
       else
-        setRoleBrush(painter, ColorRole::Window);
+        setRoleBrush(painter, ColorRole::Base);
     }
 
     painter->fillRect(option.rect, painter->brush());
@@ -2155,7 +2318,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
     if (option.features & QStyleOptionViewItem::Alternate)
       setRoleBrush(painter, ColorRole::AlternateBg);
     else
-      setRoleBrush(painter, ColorRole::Window);
+      setRoleBrush(painter, ColorRole::Base);
   };
 
   //---
@@ -2388,7 +2551,12 @@ updateVisRows()
 
   //---
 
-  int y1 = -verticalOffset()*rowHeight;
+  int y1 = 0;
+
+  if (vs_->isVisible() && vs_->value() == vs_->maximum())
+    y1 = -(nvr_*rowHeight - paintData_.vh);
+  else
+    y1 = -verticalOffset()*rowHeight;
 
   for (const auto &pr : rowDatas_) {
     const RowData &rowData = pr.second;
@@ -2628,6 +2796,19 @@ void
 CQModelView::
 handleMousePress()
 {
+  // mouse type for expand/collapse of tree
+  if (isHierarchical()) {
+    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, 0, this) ==
+          QEvent::MouseButtonPress) {
+      if (mouseData_.pressData.iind.isValid()) {
+        setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
+        return;
+      }
+    }
+  }
+
+  //---
+
   if      (mouseData_.pressData.hsection >= 0) {
     QItemSelection selection;
 
@@ -2688,9 +2869,6 @@ handleMousePress()
     sm_->setCurrentIndex(mouseData_.pressData.ind, QItemSelectionModel::NoUpdate);
 
     redraw();
-  }
-  else if (mouseData_.pressData.iind.isValid()) {
-    setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
   }
 }
 
@@ -2853,6 +3031,16 @@ void
 CQModelView::
 handleMouseRelease()
 {
+  // mouse type for expand/collapse of tree
+  if (isHierarchical()) {
+    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, 0, this) ==
+          QEvent::MouseButtonRelease) {
+      if (mouseData_.pressData.iind.isValid()) {
+        setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
+        return;
+      }
+    }
+  }
 }
 
 void
@@ -2874,13 +3062,17 @@ mouseDoubleClickEvent(QMouseEvent *e)
     if (edit(persistent, DoubleClicked, e))
       return;
 
+    if (expandsOnDoubleClick())
+      setExpanded(mouseData_.pressData.ind, ! isExpanded(mouseData_.pressData.ind));
+
     QStyleOptionViewItem option;
 
     if (style()->styleHint(QStyle::SH_ItemView_ActivateItemOnSingleClick, &option, this))
       emit activated(mouseData_.pressData.ind);
   }
   else if (mouseData_.pressData.iind.isValid()) {
-    setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
+    if (expandsOnDoubleClick())
+      setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
   }
 }
 
@@ -2905,8 +3097,50 @@ void
 CQModelView::
 keyPressEvent(QKeyEvent *e)
 {
-  if (e->key() == Qt::Key_Slash)
+  QModelIndex current = currentIndex();
+
+  // search
+  if      (e->key() == Qt::Key_Slash) {
     setShowFilter(! isShowFilter());
+  }
+  else if (e->key() == Qt::Key_Asterisk) {
+    if (isHierarchical()) {
+      std::vector<QModelIndex> parents;
+
+      parents.push_back(current);
+
+      while (! parents.empty()) {
+        QModelIndex parent = parents.back();
+
+        parents.pop_back();
+
+        int nr = model()->rowCount(parent);
+
+        for (int r = 0; r < nr; ++r) {
+          QModelIndex child = model()->index(r, 0, parent);
+
+          if (! child.isValid())
+            break;
+
+          parents.push_back(child);
+
+          expand(child);
+        }
+      }
+
+      expand(current);
+    }
+  }
+  else if (e->key() == Qt::Key_Plus) {
+    if (isHierarchical()) {
+      expand(current);
+    }
+  }
+  else if (e->key() == Qt::Key_Minus) {
+    if (isHierarchical()) {
+      collapse(current);
+    }
+  }
 
   QAbstractItemView::keyPressEvent(e);
 }
@@ -3426,6 +3660,7 @@ CQModelView::
 expandToDepth(int /*depth*/)
 {
   // TODO:
+  assert(false);
 }
 
 bool
@@ -3542,10 +3777,10 @@ resizeColumnToContents(int column)
     QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
 
     for (int i = 0; i < strs.length(); ++i)
-      w = std::max(w, fm_.width(strs[i]));
+      w = std::max(w, paintData_.fm.width(strs[i]));
   }
   else
-    w = std::max(w, fm_.width(str));
+    w = std::max(w, paintData_.fm.width(str));
 
   maxWidth = std::max(maxWidth, w);
 
@@ -3594,7 +3829,7 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
 
     QVariant data = model_->data(ind, Qt::DisplayRole);
 
-    int w = fm_.width(data.toString());
+    int w = paintData_.fm.width(data.toString());
 
     if (isHierarchical() && column == 0)
       w += (depth + rootIsDecorated())*indentation();
@@ -3769,28 +4004,59 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
 
   //---
 
-  auto prevCol = [&](int c) {
+  auto prevCol = [&](int r, int c, const QModelIndex &parent) {
+    if (c == 0 && isHierarchical()) {
+      auto pr = rowDatas_.find(currentFlatRow_);
+
+      if (pr != rowDatas_.end()) {
+        const RowData &rowData = (*pr).second;
+
+        if (rowData.children && rowData.expanded) {
+          QModelIndex ind = model_->index(r, c, parent);
+
+          collapse(ind);
+
+          return ind;
+        }
+      }
+    }
+
     auto p = visColumnDatas_.find(c);
 
-    if (p != visColumnDatas_.end())
-      --p;
+    if (p == visColumnDatas_.begin())
+      return prevRow(r, (nc_ > 0 ? nc_ - 1 : 0), parent);
 
-    if (p == visColumnDatas_.end())
-      return c;
+    --p;
 
-    return (*p).first;
+    return model_->index(r, (*p).first, parent);
   };
 
-  auto nextCol = [&](int c) {
+  auto nextCol = [&](int r, int c, const QModelIndex &parent) {
+    if (c == 0 && isHierarchical()) {
+      auto pr = rowDatas_.find(currentFlatRow_);
+
+      if (pr != rowDatas_.end()) {
+        const RowData &rowData = (*pr).second;
+
+        if (rowData.children && ! rowData.expanded) {
+          QModelIndex ind = model_->index(r, c, parent);
+
+          expand(ind);
+
+          return ind;
+        }
+      }
+    }
+
     auto p = visColumnDatas_.find(c);
 
     if (p != visColumnDatas_.end())
       ++p;
 
     if (p == visColumnDatas_.end())
-      return c;
+      return nextRow(r, 0, parent);
 
-    return (*p).first;
+    return model_->index(r, (*p).first, parent);
   };
 
   switch (action) {
@@ -3800,15 +4066,15 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
       return nextRow(r, c, parent);
     case MovePrevious:
     case MoveLeft:
-      return model_->index(r, prevCol(c), parent);
+      return prevCol(r, c, parent);
     case MoveNext:
     case MoveRight:
-      return model_->index(r, nextCol(c), parent);
+      return nextCol(r, c, parent);
     case MoveHome:
       return model_->index(0, 0, parent);
     case MoveEnd:
       // TODO: ensure valid column
-      return model_->index(nr_ - 1, nc_ - 1, parent);
+      return model_->index((nr_ > 0 ? nr_ - 1 : 0), (nc_ > 0 ? nc_ - 1 : 0), parent);
     case MovePageUp:
       return model_->index(std::max(r - scrollData_.nv, 0), c, parent);
     case MovePageDown:
@@ -3895,8 +4161,9 @@ cellPositionToIndex(PositionData &posData) const
     const VisCellData &visCellData = cp.second;
 
     if (visCellData.rect.contains(posData.pos)) {
-      posData.ind  = cp.first;
-      posData.rect = visCellData.rect;
+      posData.ind     = cp.first;
+      posData.rect    = visCellData.rect;
+      posData.flatRow = visCellData.flatRow;
       return true;
     }
   }
@@ -3905,8 +4172,9 @@ cellPositionToIndex(PositionData &posData) const
     const VisCellData &visCellData = cp.second;
 
     if (visCellData.rect.contains(posData.pos)) {
-      posData.iind = cp.first;
-      posData.rect = visCellData.rect;
+      posData.iind    = cp.first;
+      posData.rect    = visCellData.rect;
+      posData.flatRow = visCellData.flatRow;
       return true;
     }
   }
@@ -3979,17 +4247,22 @@ setRolePen(QPainter *painter, ColorRole role, double alpha) const
     paintData_.penAlpha = alpha;
 
     if (paintData_.penRole != ColorRole::None) {
-      auto p = paintData_.roleColors.find(paintData_.penRole);
-
-      if (p == paintData_.roleColors.end()) {
-        QColor c = roleColor(role);
-
-        c.setAlphaF(alpha);
-
-        p = paintData_.roleColors.insert(p, RoleColors::value_type(paintData_.penRole, c));
+      if (role == ColorRole::GridFg) {
+        painter->setPen(paintData_.gridPen);
       }
+      else {
+        auto p = paintData_.roleColors.find(paintData_.penRole);
 
-      painter->setPen((*p).second);
+        if (p == paintData_.roleColors.end()) {
+          QColor c = roleColor(role);
+
+          c.setAlphaF(alpha);
+
+          p = paintData_.roleColors.insert(p, RoleColors::value_type(paintData_.penRole, c));
+        }
+
+        painter->setPen((*p).second);
+      }
     }
     else
       painter->setPen(Qt::NoPen);
@@ -4028,6 +4301,7 @@ roleColor(ColorRole role) const
 {
   switch (role) {
     case ColorRole::Window      : return palette().color(QPalette::Window);
+    case ColorRole::Base        : return palette().color(QPalette::Base);
     case ColorRole::Text        : return palette().color(QPalette::Text);
     case ColorRole::HeaderBg    : return QColor("#DDDDEE");
     case ColorRole::HeaderFg    : return textColor(roleColor(ColorRole::HeaderBg));
@@ -4070,194 +4344,6 @@ blendColors(const QColor &c1, const QColor &c2, double f) const
   return QColor(clamp(int(255*r), 0, 255),
                 clamp(int(255*g), 0, 255),
                 clamp(int(255*b), 0, 255));
-}
-
-//------
-
-CQModelViewHeader::
-CQModelViewHeader(Qt::Orientation orientation, CQModelView *view) :
- QHeaderView(orientation, view), view_(view)
-{
-  setContextMenuPolicy(Qt::DefaultContextMenu);
-
-  setSectionsClickable(true);
-  setHighlightSections(true);
-
-  setMouseTracking(true);
-}
-
-void
-CQModelViewHeader::
-resizeEvent(QResizeEvent *)
-{
-}
-
-void
-CQModelViewHeader::
-paintEvent(QPaintEvent *)
-{
-  QPainter painter(this->viewport());
-
-  QColor c = palette().color(QPalette::Window);
-
-  painter.fillRect(rect(), c);
-
-  if (orientation() == Qt::Horizontal)
-    view_->drawHHeader(&painter);
-  else
-    view_->drawVHeader(&painter);
-}
-
-void
-CQModelViewHeader::
-mousePressEvent(QMouseEvent *e)
-{
-  if (e->button() != Qt::LeftButton)
-    return;
-
-  auto mouseData = view_->mouseData();
-
-  mouseData.pressData.pos = e->pos();
-
-  mouseData.pressed = true;
-
-  if (orientation() == Qt::Horizontal)
-    view_->hheaderPositionToIndex(mouseData.pressData);
-  else
-    view_->vheaderPositionToIndex(mouseData.pressData);
-
-  view_->setMouseData(mouseData);
-
-  view_->handleMousePress();
-}
-
-void
-CQModelViewHeader::
-mouseMoveEvent(QMouseEvent *e)
-{
-  auto mouseData = view_->mouseData();
-
-  CQModelView::PositionData moveData;
-
-  moveData.pos = e->pos();
-
-  if (orientation() == Qt::Horizontal)
-    view_->hheaderPositionToIndex(moveData);
-  else
-    view_->vheaderPositionToIndex(moveData);
-
-  if (! mouseData.pressed) {
-    if (moveData != mouseData.moveData) {
-      mouseData.moveData = moveData;
-
-      if (orientation() == Qt::Horizontal) {
-        if (mouseData.moveData.hsectionh != -1)
-          setCursor(Qt::SplitHCursor);
-        else
-          unsetCursor();
-      }
-
-      view_->setMouseData(mouseData);
-
-      view_->redraw();
-    }
-  }
-  else {
-    mouseData.moveData = moveData;
-
-    view_->setMouseData(mouseData);
-
-    view_->handleMouseMove();
-  }
-}
-
-void
-CQModelViewHeader::
-mouseReleaseEvent(QMouseEvent *e)
-{
-  if (e->button() != Qt::LeftButton)
-    return;
-
-  auto mouseData = view_->mouseData();
-
-  mouseData.releaseData.pos = e->pos();
-
-  mouseData.pressed = false;
-
-  if (orientation() == Qt::Horizontal)
-    view_->hheaderPositionToIndex(mouseData.releaseData);
-  else
-    view_->vheaderPositionToIndex(mouseData.releaseData);
-
-  view_->setMouseData(mouseData);
-
-  view_->handleMouseRelease();
-}
-
-void
-CQModelViewHeader::
-mouseDoubleClickEvent(QMouseEvent *e)
-{
-  if (e->button() != Qt::LeftButton)
-    return;
-
-  auto mouseData = view_->mouseData();
-
-  mouseData.pressData.pos = e->pos();
-
-  if (orientation() == Qt::Horizontal)
-    view_->hheaderPositionToIndex(mouseData.pressData);
-  else
-    view_->vheaderPositionToIndex(mouseData.pressData);
-
-  view_->setMouseData(mouseData);
-
-  view_->handleMouseDoubleClick();
-}
-
-void
-CQModelViewHeader::
-keyPressEvent(QKeyEvent *)
-{
-}
-
-void
-CQModelViewHeader::
-leaveEvent(QEvent *)
-{
-  auto mouseData = view_->mouseData();
-
-  mouseData.reset();
-
-  view_->setMouseData(mouseData);
-
-  view_->redraw();
-}
-
-void
-CQModelViewHeader::
-contextMenuEvent(QContextMenuEvent *e)
-{
-  auto mouseData = view_->mouseData();
-
-  mouseData.menuData.pos = e->pos();
-
-  if (orientation() == Qt::Horizontal)
-    view_->hheaderPositionToIndex(mouseData.menuData);
-  else
-    view_->vheaderPositionToIndex(mouseData.menuData);
-
-  view_->setMouseData(mouseData);
-
-  view_->showMenu(e->globalPos());
-}
-
-void
-CQModelViewHeader::
-redraw()
-{
-  viewport()->update(viewport()->rect());
-  update(rect());
 }
 
 //------

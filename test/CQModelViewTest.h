@@ -9,6 +9,7 @@ class CQModelViewStats;
 class QAbstractItemModel;
 class CQItemDelegate;
 class QTreeView;
+class QTableView;
 class QSortFilterProxyModel;
 class QLabel;
 
@@ -34,6 +35,9 @@ class CQModelViewTest : public QFrame {
   bool isShowTree() const { return showTree_; }
   void setShowTree(bool b) { showTree_ = b; updateVisibleState(); }
 
+  bool isShowTable() const { return showTable_; }
+  void setShowTable(bool b) { showTable_ = b; updateVisibleState(); }
+
   void load(const QString &filename);
 
   QSize sizeHint() const override;
@@ -41,6 +45,8 @@ class CQModelViewTest : public QFrame {
   void updateVisibleState();
 
  private slots:
+  void gridSlot(int state);
+
   void updateState();
 
  private:
@@ -48,10 +54,12 @@ class CQModelViewTest : public QFrame {
   bool                   firstLineHeader_   { false };
   bool                   firstColumnHeader_ { false };
   bool                   showTree_          { false };
+  bool                   showTable_         { false };
   bool                   showStats_         { false };
   CQModelView*           view_              { nullptr };
   CQModelViewStats*      stats_             { nullptr };
-  QTreeView*             qview_             { nullptr };
+  QTreeView*             tree_              { nullptr };
+  QTableView*            table_             { nullptr };
   QLabel*                statusLabel_       { nullptr };
   QAbstractItemModel*    model_             { nullptr };
   QSortFilterProxyModel* proxyModel_        { nullptr };

@@ -14,3 +14,8 @@
    + select all
    + root index
    + keyboard search
+## 9/8/2019
+ + Fix alternate colors
+ + Add show grid property
+ + Improve keyboard prev/next for tree
+ + Split header to separate file
