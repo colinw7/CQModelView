@@ -1242,7 +1242,7 @@ drawGrid(QPainter *painter)
 
       int x1 = visRowData.rect.left();
 //    int y1 = visRowData.rect.top();
-      int y2 = visRowData.rect.bottom();
+      int y2 = visRowData.rect.bottom() - 1;
 
       painter->drawLine(x1, y2, paintData_.vw - x1, y2);
     }
@@ -1479,7 +1479,7 @@ drawCellsSelection(QPainter *painter) const
         x1 = visColumnData1.rect.left ();
       }
 
-      if (pc2 == visColumnDatas_.end()) {
+      if (pc2 != visColumnDatas_.end()) {
         const VisColumnData &visColumnData2 = (*pc2).second;
 
         x2 = visColumnData2.rect.right();
@@ -1671,15 +1671,11 @@ drawHHeader(QPainter *painter) const
 
         QString str = data.toString();
 
-        if (isMultiHeaderLines()) {
-          QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
+        QStringList strs = str.split(QRegExp("\n|\r\n|\r"));
 
-          setRolePen(painter, ColorRole::HeaderFg);
+        setRolePen(painter, ColorRole::HeaderFg);
 
-          painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, strs[r]);
-        }
-        else
-          painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, str);
+        painter->drawText(rect, Qt::AlignHCenter | Qt::AlignVCenter, strs[r]);
 
         //---
 
@@ -1831,14 +1827,15 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
       bool inSpan = false;
 
       auto ps = rowColumnSpans_.find(r);
-      if (ps == rowColumnSpans_.end()) continue;
 
-      const ColumnSpans &columnSpans = (*ps).second;
+      if (ps != rowColumnSpans_.end()) {
+        const ColumnSpans &columnSpans = (*ps).second;
 
-      for (const auto &span : columnSpans) {
-        if (c >= span.first && c <= span.second) {
-          inSpan = true;
-          break;
+        for (const auto &span : columnSpans) {
+          if (c >= span.first && c <= span.second) {
+            inSpan = true;
+            break;
+          }
         }
       }
 
@@ -1873,7 +1870,7 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
 
   initPen();
 
-  for (int r = 0; r < strs.size(); ++r) {
+  for (int r = 0; r < ns; ++r) {
     const RectSpan &rectSpan = rowRects[r];
 
     //---
