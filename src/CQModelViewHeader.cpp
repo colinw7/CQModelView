@@ -355,9 +355,16 @@ QRegion
 CQModelViewHeader::
 visualRegionForSelection(const QItemSelection &selection) const
 {
-  std::cerr << "CQModelViewHeader::visualRegionForSelection\n";
+  //std::cerr << "CQModelViewHeader::visualRegionForSelection\n";
 
   return QHeaderView::visualRegionForSelection(selection);
+}
+
+void
+CQModelViewHeader::
+emitSectionClicked(int section)
+{
+  emit sectionClicked(section);
 }
 
 void

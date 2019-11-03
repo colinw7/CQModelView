@@ -80,6 +80,7 @@ class CQModelView : public QAbstractItemView {
 
  public:
   CQModelView(QWidget *parent=nullptr);
+ ~CQModelView();
 
   //---
 
@@ -212,6 +213,8 @@ class CQModelView : public QAbstractItemView {
 
   bool isExpanded(const QModelIndex &index) const;
   void setExpanded(const QModelIndex &index, bool expand);
+
+  void expandedIndices(QModelIndexList &inds) const;
 
   //---
 
@@ -508,7 +511,6 @@ class CQModelView : public QAbstractItemView {
  private:
   struct GlobalColumnData {
     int headerWidth { 10 };
-    int margin      { 4 };
   };
 
   struct ColumnData {
@@ -718,6 +720,9 @@ class CQModelView : public QAbstractItemView {
   QItemSelectionModel *vsm_ { nullptr };
   QItemSelectionModel *hsm_ { nullptr };
 
+  bool autoFitOnShow_ { true };
+  bool autoFitted_    { false };
+
   // draw data
   int   nr_  { 0 };
   int   nc_  { 0 };
@@ -760,9 +765,6 @@ class CQModelViewCornerButton : public QAbstractButton {
   CQModelViewCornerButton(CQModelView *view);
 
   void paintEvent(QPaintEvent*) override;
-
- private:
-  CQModelView* view_ { nullptr };
 };
 
 //---

@@ -66,6 +66,10 @@ class CQModelViewHeader : public QHeaderView {
 
   //---
 
+  void emitSectionClicked(int section);
+
+  //---
+
   void redraw();
 
   QSize sizeHint() const override { return QSize(100, 100); }
