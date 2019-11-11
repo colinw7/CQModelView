@@ -38,6 +38,9 @@ CQModelView(QWidget *parent) :
   hh_ = new CQModelViewHeader(Qt::Horizontal, this);
   vh_ = new CQModelViewHeader(Qt::Vertical  , this);
 
+  hh_->setObjectName("hheader");
+  vh_->setObjectName("vheader");
+
   hsm_ = new QItemSelectionModel;
   vsm_ = new QItemSelectionModel;
 
