@@ -301,7 +301,7 @@ QRect
 CQModelViewHeader::
 visualRect(const QModelIndex &index) const
 {
-  std::cerr << "CQModelViewHeader::visualRect\n";
+  //std::cerr << "CQModelViewHeader::visualRect\n";
 
   return QHeaderView::visualRect(index);
 }
@@ -319,7 +319,7 @@ QModelIndex
 CQModelViewHeader::
 indexAt(const QPoint &p) const
 {
-  std::cerr << "CQModelViewHeader::indexAt\n";
+  //std::cerr << "CQModelViewHeader::indexAt\n";
 
   return QHeaderView::indexAt(p);
 }
