@@ -33,7 +33,8 @@ main(int argc, char **argv)
              "-first_column_header:b (First Column Header) "
              "-stats:b               (Show Stats) "
              "-tree:b                (Show QTreeView) "
-             "-table:b               (Show QableView)");
+             "-table:b               (Show QTableView) "
+             "-no_delegate:b         (No Delegate)");
 
   args.parse(&argc, argv);
 
@@ -43,6 +44,7 @@ main(int argc, char **argv)
   bool showStats           = args.getArg<bool>("-stats");
   bool showTree            = args.getArg<bool>("-tree");
   bool showTable           = args.getArg<bool>("-table");
+  bool noDelegate          = args.getArg<bool>("-no_delegate");
 
   std::vector<QString> filenames;
 
@@ -54,7 +56,7 @@ main(int argc, char **argv)
 
   //---
 
-  CQModelViewTest *test = new CQModelViewTest;
+  CQModelViewTest *test = new CQModelViewTest(! noDelegate);
 
   test->setCommentHeader    (comment_header);
   test->setFirstLineHeader  (first_line_header);
@@ -74,7 +76,7 @@ main(int argc, char **argv)
 //---
 
 CQModelViewTest::
-CQModelViewTest()
+CQModelViewTest(bool useDelegate)
 {
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->setMargin(2); layout->setSpacing(2);
@@ -99,9 +101,11 @@ CQModelViewTest()
   view_->setStretchLastColumn(true);
   view_->setShowGrid(false);
 
-  delegate_ = new CQItemDelegate(view_);
+  if (useDelegate) {
+    delegate_ = new CQItemDelegate(view_);
 
-  view_->setItemDelegate(delegate_);
+    view_->setItemDelegate(delegate_);
+  }
 
   viewLayout->addWidget(view_);
 
@@ -118,9 +122,11 @@ CQModelViewTest()
 //tree_->setShowGrid(state);
 //tree_->setStretchLastColumn(true);
 
-  delegate_ = new CQItemDelegate(tree_);
+  if (useDelegate) {
+    delegate_ = new CQItemDelegate(tree_);
 
-  tree_->setItemDelegate(delegate_);
+    tree_->setItemDelegate(delegate_);
+  }
 
   viewLayout->addWidget(tree_);
 
@@ -135,9 +141,11 @@ CQModelViewTest()
   table_->setShowGrid(false);
 //table_->setStretchLastColumn(true);
 
-  delegate_ = new CQItemDelegate(table_);
+  if (useDelegate) {
+    delegate_ = new CQItemDelegate(table_);
 
-  table_->setItemDelegate(delegate_);
+    table_->setItemDelegate(delegate_);
+  }
 
   viewLayout->addWidget(table_);
 

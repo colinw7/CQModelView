@@ -15,7 +15,7 @@ CQItemDelegate::
 CQItemDelegate(QAbstractItemView *view) :
  view_(view)
 {
-  setClipping(false);
+  //setClipping(false);
 }
 
 void

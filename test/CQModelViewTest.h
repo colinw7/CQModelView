@@ -17,7 +17,7 @@ class CQModelViewTest : public QFrame {
   Q_OBJECT
 
  public:
-  CQModelViewTest();
+  CQModelViewTest(bool useDelegate=true);
  ~CQModelViewTest();
 
   bool isCommentHeader() const { return commentHeader_; }

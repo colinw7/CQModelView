@@ -21,6 +21,7 @@
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QMenu>
+#include <QTextLayout>
 
 #include <set>
 #include <iostream>
@@ -291,7 +292,7 @@ void
 CQModelView::
 dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles)
 {
-  std::cerr << "CQModelView::dataChanged\n";
+  //std::cerr << "CQModelView::dataChanged\n";
 
   QAbstractItemView::dataChanged(topLeft, bottomRight, roles);
 }
@@ -356,7 +357,7 @@ void
 CQModelView::
 rowsInserted(const QModelIndex &parent, int start, int end)
 {
-  std::cerr << "CQModelView::rowsInserted\n";
+  //std::cerr << "CQModelView::rowsInserted\n";
 
   QAbstractItemView::rowsInserted(parent, start, end);
 }
@@ -365,7 +366,7 @@ void
 CQModelView::
 rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end)
 {
-  std::cerr << "CQModelView::rowsAboutToBeRemoved\n";
+  //std::cerr << "CQModelView::rowsAboutToBeRemoved\n";
 
   QAbstractItemView::rowsAboutToBeRemoved(parent, start, end);
 }
@@ -383,7 +384,7 @@ void
 CQModelView::
 updateGeometries()
 {
-  std::cerr << "CQModelView::updateGeometries\n";
+  //std::cerr << "CQModelView::updateGeometries\n";
 
   QAbstractItemView::updateGeometries();
 }
@@ -2390,7 +2391,44 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
     QString str = data.toString();
 
-    painter->drawText(option.rect.adjusted(4, 0, -4, 0), option.displayAlignment, str);
+    QRect textRect = option.rect.adjusted(4, 0, -4, 0);
+
+    painter->save();
+
+    painter->setClipRect(textRect);
+
+#if 1
+    QTextOption textOption;
+
+    textOption.setAlignment(option.displayAlignment);
+
+    QTextLayout textLayout(str, option.font);
+
+    textLayout.setTextOption(textOption);
+
+    (void) viewItemTextLayout(textLayout, textRect.width());
+
+    int nl = textLayout.lineCount();
+
+    for (int i = 0; i < nl; ++i) {
+      QTextLine line = textLayout.lineAt(i);
+
+      int start  = line.textStart();
+      int length = line.textLength();
+
+      QString text = textLayout.text().mid(start, length);
+
+      painter->drawText(textRect.topLeft() + QPoint(0, paintData_.fm.ascent()), text);
+
+      //line.draw(painter, textRect.topLeft());
+
+      break;
+    }
+#else
+    painter->drawText(textRect, option.displayAlignment, str);
+#endif
+
+    painter->restore();
   }
   else {
     //style()->drawPrimitive(QStyle::PE_PanelItemViewRow, &option, painter, this);
@@ -3374,6 +3412,8 @@ addMenuActions(QMenu *menu)
       setIcon(QIcon(QPixmap::fromImage(FIT_COLUMN_SVG().image(is, is))));
   }
 
+  addAction(fitMenu, "Fit No Scroll", SLOT(fitNoScrollSlot()));
+
   //--
 
   QMenu *showHideMenu = addMenu("Show/Hide");
@@ -3915,6 +3955,20 @@ fitColumnSlot()
 
 void
 CQModelView::
+fitNoScrollSlot()
+{
+  int vw = viewport()->rect().width();
+
+  int w = (nc_ > 0 ? vw/nc_ : 0);
+
+  for (int c = 0; c < nc_; ++c)
+    setColumnWidth(c, w);
+
+  redraw();
+}
+
+void
+CQModelView::
 resizeColumnToContents(int column)
 {
   int maxWidth = 0;
@@ -3991,7 +4045,23 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
 
     QVariant data = model_->data(ind, Qt::DisplayRole);
 
-    int w = paintData_.fm.width(data.toString());
+    int w = 0;
+
+#if 1
+    QStringList strs = data.toString().split("\n");
+
+    int nl = strs.length();
+
+    for (int i = 0; i < nl; ++i) {
+      const QString &str = strs[i];
+
+      w = paintData_.fm.width(str);
+
+      break;
+    }
+#else
+    w = paintData_.fm.width(data.toString());
+#endif
 
     if (isHierarchical() && column == 0)
       w += (depth + rootIsDecorated())*indentation();
@@ -4506,6 +4576,34 @@ blendColors(const QColor &c1, const QColor &c2, double f) const
   return QColor(clamp(int(255*r), 0, 255),
                 clamp(int(255*g), 0, 255),
                 clamp(int(255*b), 0, 255));
+}
+
+QSizeF
+CQModelView::
+viewItemTextLayout(QTextLayout &textLayout, int lineWidth) const
+{
+  double height    = 0;
+  double widthUsed = 0;
+
+  textLayout.beginLayout();
+
+  while (true) {
+    QTextLine line = textLayout.createLine();
+
+    if (! line.isValid())
+      break;
+
+    line.setLineWidth(lineWidth);
+    line.setPosition(QPointF(0, height));
+
+    height += line.height();
+
+    widthUsed = std::max(widthUsed, line.naturalTextWidth());
+  }
+
+  textLayout.endLayout();
+
+  return QSizeF(widthUsed, height);
 }
 
 //------

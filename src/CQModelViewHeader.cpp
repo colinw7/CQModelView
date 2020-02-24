@@ -274,7 +274,7 @@ void
 CQModelViewHeader::
 scrollContentsBy(int dx, int dy)
 {
-  std::cerr << "CQModelViewHeader::scrollContentsBy\n";
+  //std::cerr << "CQModelViewHeader::scrollContentsBy\n";
 
   return QHeaderView::scrollContentsBy(dx, dy);
 }
@@ -283,7 +283,7 @@ void
 CQModelViewHeader::
 dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles)
 {
-  std::cerr << "CQModelViewHeader::dataChanged\n";
+  //std::cerr << "CQModelViewHeader::dataChanged\n";
 
   return QHeaderView::dataChanged(topLeft, bottomRight, roles);
 }
@@ -292,7 +292,7 @@ void
 CQModelViewHeader::
 rowsInserted(const QModelIndex &parent, int start, int end)
 {
-  std::cerr << "CQModelViewHeader::rowsInserted\n";
+  //std::cerr << "CQModelViewHeader::rowsInserted\n";
 
   return QHeaderView::rowsInserted(parent, start, end);
 }
@@ -310,7 +310,7 @@ void
 CQModelViewHeader::
 scrollTo(const QModelIndex &index, ScrollHint hint)
 {
-  std::cerr << "CQModelViewHeader::scrollTo\n";
+  //std::cerr << "CQModelViewHeader::scrollTo\n";
 
   return QHeaderView::scrollTo(index, hint);
 }
@@ -328,7 +328,7 @@ bool
 CQModelViewHeader::
 isIndexHidden(const QModelIndex &index) const
 {
-  std::cerr << "CQModelViewHeader::isIndexHidden\n";
+  //std::cerr << "CQModelViewHeader::isIndexHidden\n";
 
   return QHeaderView::isIndexHidden(index);
 }
@@ -337,7 +337,7 @@ QModelIndex
 CQModelViewHeader::
 moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
 {
-  std::cerr << "CQModelViewHeader::moveCursor\n";
+  //std::cerr << "CQModelViewHeader::moveCursor\n";
 
   return QHeaderView::moveCursor(action, modifiers);
 }
@@ -346,7 +346,7 @@ void
 CQModelViewHeader::
 setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags flags)
 {
-  std::cerr << "CQModelViewHeader::setSelection\n";
+  //std::cerr << "CQModelViewHeader::setSelection\n";
 
   return QHeaderView::setSelection(rect, flags);
 }
