@@ -1097,6 +1097,12 @@ void
 CQModelView::
 updateSelection()
 {
+  if (! model_)
+    return;
+
+  //---
+
+  // get selected columns and rows
   const QItemSelection selection = sm_->selection();
 
   std::set<int>         columns;
@@ -1115,7 +1121,10 @@ updateSelection()
     }
   }
 
-  QItemSelection hselection, vselection;
+  //---
+
+  // select horizontal header columns
+  QItemSelection hselection;
 
   for (auto &c : columns) {
     QModelIndex hind = model_->index(0, c, QModelIndex());
@@ -1123,14 +1132,21 @@ updateSelection()
     hselection.select(hind, hind);
   }
 
-  for (auto &r : rows)
-    vselection.select(r, r);
-
   if (hsm_->model())
     hsm_->select(hselection, QItemSelectionModel::ClearAndSelect);
 
+  //---
+
+  // select vertical header rows
+  QItemSelection vselection;
+
+  for (auto &r : rows)
+    vselection.select(r, r);
+
   if (vsm_->model())
     vsm_->select(vselection, QItemSelectionModel::ClearAndSelect);
+
+  //---
 
   redraw();
 }
