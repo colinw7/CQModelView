@@ -55,7 +55,7 @@ class CLargestRect {
 
   Rect largestRect(const VALUE &value) const {
     Point best_ll( 0,  0);
-    Point best_ur(-1, -1); // bug fix, was 0,0
+    Point best_ur(-1, -1); // bug fix, was 0, 0
 
     std::vector<int> c;
 
@@ -63,7 +63,7 @@ class CLargestRect {
 
     int width1, x0, w0;
 
-    typedef std::pair<int,int> Xw;
+    using Xw = std::pair<int, int>;
 
     Xw xw;
 

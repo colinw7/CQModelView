@@ -8,6 +8,8 @@ CQModelViewHeader::
 CQModelViewHeader(Qt::Orientation orientation, CQModelView *view) :
  QHeaderView(orientation, view), view_(view)
 {
+  setObjectName(orientation == Qt::Horizontal ? "hheader" : "vheader");
+
   setContextMenuPolicy(Qt::DefaultContextMenu);
 
   setSectionsClickable(true);
@@ -93,7 +95,8 @@ mousePressEvent(QMouseEvent *e)
 
   mouseData.pressData.pos = e->pos();
 
-  mouseData.pressed = true;
+  mouseData.pressed   = true;
+  mouseData.modifiers = e->modifiers();
 
   if (orientation() == Qt::Horizontal)
     view_->hheaderPositionToIndex(mouseData.pressData);

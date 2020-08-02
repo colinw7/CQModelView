@@ -39,9 +39,6 @@ CQModelView(QWidget *parent) :
   hh_ = new CQModelViewHeader(Qt::Horizontal, this);
   vh_ = new CQModelViewHeader(Qt::Vertical  , this);
 
-  hh_->setObjectName("hheader");
-  vh_->setObjectName("vheader");
-
   hsm_ = new QItemSelectionModel;
   vsm_ = new QItemSelectionModel;
 
@@ -70,7 +67,9 @@ CQModelView(QWidget *parent) :
 
   //---
 
-  setSelectionModel(new CQModelViewSelectionModel(this));
+  auto *selectionModel = new CQModelViewSelectionModel(this);
+
+  CQModelView::setSelectionModel(selectionModel);
 
   //---
 
@@ -85,6 +84,8 @@ CQModelView::
 {
   delete hsm_;
   delete vsm_;
+
+  delete sm_;
 }
 
 QSize
@@ -116,30 +117,30 @@ setModel(QAbstractItemModel *model)
 
   // disconnect from old model
   if (model_) {
-    disconnect(model_, SIGNAL(rowsInserted(QModelIndex,int,int)),
+    disconnect(model_, SIGNAL(rowsInserted(QModelIndex, int, int)),
                this, SLOT(modelChangedSlot()));
-    disconnect(model_, SIGNAL(columnsInserted(QModelIndex,int,int)),
+    disconnect(model_, SIGNAL(columnsInserted(QModelIndex, int, int)),
                this, SLOT(modelChangedSlot()));
-    disconnect(model_, SIGNAL(rowsRemoved(QModelIndex,int,int)),
+    disconnect(model_, SIGNAL(rowsRemoved(QModelIndex, int, int)),
                this, SLOT(modelChangedSlot()));
-    disconnect(model_, SIGNAL(columnsRemoved(QModelIndex,int,int)),
+    disconnect(model_, SIGNAL(columnsRemoved(QModelIndex, int, int)),
                this, SLOT(modelChangedSlot()));
   }
 
   if (sm_ && model_)
-    disconnect(sm_, SIGNAL(currentRowChanged(QModelIndex,QModelIndex)), model_, SLOT(submit()));
+    disconnect(sm_, SIGNAL(currentRowChanged(QModelIndex, QModelIndex)), model_, SLOT(submit()));
 
   model_ = model;
 
   // connect to new model
   if (model_) {
-    connect(model_, SIGNAL(rowsInserted(QModelIndex,int,int)),
+    connect(model_, SIGNAL(rowsInserted(QModelIndex, int, int)),
             this, SLOT(modelChangedSlot()));
-    connect(model_, SIGNAL(columnsInserted(QModelIndex,int,int)),
+    connect(model_, SIGNAL(columnsInserted(QModelIndex, int, int)),
             this, SLOT(modelChangedSlot()));
-    connect(model_, SIGNAL(rowsRemoved(QModelIndex,int,int)),
+    connect(model_, SIGNAL(rowsRemoved(QModelIndex, int, int)),
             this, SLOT(modelChangedSlot()));
-    connect(model_, SIGNAL(columnsRemoved(QModelIndex,int,int)),
+    connect(model_, SIGNAL(columnsRemoved(QModelIndex, int, int)),
             this, SLOT(modelChangedSlot()));
   }
 
@@ -163,7 +164,7 @@ setModel(QAbstractItemModel *model)
     vsm_->setModel(model_);
 
     hh_->setSelectionModel(hsm_);
-    hh_->setSelectionModel(hsm_);
+    vh_->setSelectionModel(vsm_);
   }
 
   //---
@@ -225,7 +226,10 @@ setSelectionModel(QItemSelectionModel *sm)
   }
 
   if (sm_ && model_)
-    disconnect(sm_, SIGNAL(currentRowChanged(QModelIndex,QModelIndex)), model_, SLOT(submit()));
+    disconnect(sm_, SIGNAL(currentRowChanged(QModelIndex, QModelIndex)), model_, SLOT(submit()));
+
+  if (sm_)
+    delete sm_;
 
   sm_ = sm;
 
@@ -236,7 +240,7 @@ setSelectionModel(QItemSelectionModel *sm)
   }
 
   if (sm_ && model_)
-    connect(sm_, SIGNAL(currentRowChanged(QModelIndex,QModelIndex)), model_, SLOT(submit()));
+    connect(sm_, SIGNAL(currentRowChanged(QModelIndex, QModelIndex)), model_, SLOT(submit()));
 
   redraw();
 }
@@ -299,6 +303,143 @@ dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QV
 
 void
 CQModelView::
+selectColumn(int section, Qt::KeyboardModifiers modifiers)
+{
+  QModelIndex parent = rootIndex();
+
+  QModelIndex ind = model_->index(0, section, parent);
+
+  QItemSelection selection;
+
+  selection.select(ind, ind);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Columns);
+  else
+    sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Columns);
+
+  sm_->setCurrentIndex(ind, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectColumnRange(int section1, int section2, Qt::KeyboardModifiers modifiers)
+{
+  QModelIndex parent = rootIndex();
+
+  QModelIndex ind1 = model_->index(0, section1, parent);
+  QModelIndex ind2 = model_->index(0, section2, parent);
+
+  QItemSelection selection;
+
+  if (section1 > section2)
+    selection.select(ind1, ind2);
+  else
+    selection.select(ind2, ind1);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Columns);
+  else
+    sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Columns);
+
+  sm_->setCurrentIndex(ind2, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectRow(int section, Qt::KeyboardModifiers modifiers)
+{
+  QModelIndex parent = rootIndex();
+
+  QModelIndex ind = model_->index(section, 0, parent);
+
+  QItemSelection selection;
+
+  selection.select(ind, ind);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+  else
+    sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+
+  sm_->setCurrentIndex(ind, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectRowRange(int section1, int section2, Qt::KeyboardModifiers modifiers)
+{
+  QModelIndex parent = rootIndex();
+
+  QModelIndex ind1 = model_->index(section1, 0, parent);
+  QModelIndex ind2 = model_->index(section2, 0, parent);
+
+  QItemSelection selection;
+
+  if (section1 < section2)
+    selection.select(ind1, ind2);
+  else
+    selection.select(ind2, ind1);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+  else
+    sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+
+  sm_->setCurrentIndex(ind2, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectCell(const QModelIndex &ind, Qt::KeyboardModifiers modifiers)
+{
+  QItemSelection selection;
+
+  selection.select(ind, ind);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect);
+  else
+    sm_->select(selection, QItemSelectionModel::Select);
+
+  sm_->setCurrentIndex(ind, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectCellRange(const QModelIndex &ind1, const QModelIndex &ind2, Qt::KeyboardModifiers modifiers)
+{
+  int row1 = ind1.row();
+  int row2 = ind2.row();
+
+  int column1 = ind1.column();
+  int column2 = ind2.column();
+
+  int r1 = std::min(row1, row2);
+  int r2 = std::max(row1, row2);
+
+  int c1 = std::min(column1, column2);
+  int c2 = std::max(column1, column2);
+
+  QModelIndex parent = rootIndex();
+
+  QModelIndex oind1 = model_->index(r1, c1, parent);
+  QModelIndex oind2 = model_->index(r2, c2, parent);
+
+  QItemSelection selection;
+
+  selection.select(oind1, oind2);
+
+  if (! (modifiers & Qt::ControlModifier))
+    sm_->select(selection, QItemSelectionModel::ClearAndSelect);
+  else
+    sm_->select(selection, QItemSelectionModel::Select);
+
+  sm_->setCurrentIndex(ind2, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
 selectAll()
 {
   if (isHierarchical()) {
@@ -309,7 +450,7 @@ selectAll()
     QModelIndex parent = rootIndex();
 
     for (const auto &pr : rowDatas_) {
-      const RowData &rowData = pr.second;
+      const auto &rowData = pr.second;
 
       if (row1 >= 0 && rowData.row == row2 + 1 && rowData.parent == parent) {
         row2 = rowData.row;
@@ -412,7 +553,7 @@ keyboardSearch(const QString &search)
   auto pr = rowDatas_.begin();
 
   while (pr != rowDatas_.end()) {
-    const RowData &rowData = (*pr).second;
+    const auto &rowData = (*pr).second;
 
     QModelIndex index = model_->index(rowData.row, 0, rowData.parent);
 
@@ -431,7 +572,7 @@ keyboardSearch(const QString &search)
   }
 
   while (pr != rowDatas_.end()) {
-    const RowData &rowData = (*pr).second;
+    const auto &rowData = (*pr).second;
 
     QModelIndex index = model_->index(rowData.row, 0, rowData.parent);
 
@@ -449,7 +590,7 @@ keyboardSearch(const QString &search)
     pr = rowDatas_.begin();
 
     while (pr != rowDatas_.end()) {
-      const RowData &rowData = (*pr).second;
+      const auto &rowData = (*pr).second;
 
       QModelIndex index = model_->index(rowData.row, 0, rowData.parent);
 
@@ -487,7 +628,7 @@ columnWidth(int column) const
   auto p = visColumnDatas_.find(column);
   if (p == visColumnDatas_.end()) return 0;
 
-  const VisColumnData &visColumnData = (*p).second;
+  const auto &visColumnData = (*p).second;
 
   return columnWidth(column, visColumnData);
 }
@@ -663,6 +804,24 @@ setShowGrid(bool b)
   redraw();
 }
 
+void
+CQModelView::
+setShowHHeaderLines(bool b)
+{
+  showHHeaderLines_ = b;
+
+  redraw();
+}
+
+void
+CQModelView::
+setShowVHeaderLines(bool b)
+{
+  showVHeaderLines_ = b;
+
+  redraw();
+}
+
 //---
 
 bool
@@ -792,7 +951,7 @@ updateWidgetGeometries()
 
   globalRowData_.headerHeight = 0;
 
-  using ColumnStrs = std::map<int,QStringList>;
+  using ColumnStrs = std::map<int, QStringList>;
 
   ColumnStrs columnStrs;
   int        ncr = 0;
@@ -828,12 +987,12 @@ updateWidgetGeometries()
 
   //---
 
-  using RowStrs = std::map<int,QStringList>;
+  using RowStrs = std::map<int, QStringList>;
 
   if (isMultiHeaderLines()) {
     // pad from front (lines are bottom to top)
     for (auto &pcs : columnStrs) {
-      QStringList &strs = pcs.second;
+      auto &strs = pcs.second;
 
       while (strs.size() < ncr)
         strs.push_front("");
@@ -852,8 +1011,8 @@ updateWidgetGeometries()
     //---
 
     for (auto &prs : rowStrs) {
-      int          r    = prs.first;
-      QStringList &strs = prs.second;
+      int   r    = prs.first;
+      auto &strs = prs.second;
 
       int nc = strs.size();
 
@@ -921,7 +1080,7 @@ updateWidgetGeometries()
   }
 
   while (nfe < nvc_) {
-    CQModelViewFilterEdit *le = new CQModelViewFilterEdit(this);
+    auto *le = new CQModelViewFilterEdit(this);
     le->setObjectName(QString("filterEdit%1").arg(nfe));
 
     connect(le, SIGNAL(editingFinished()), this, SLOT(editFilterSlot()));
@@ -939,7 +1098,7 @@ updateWidgetGeometries()
     for (const auto &vp : visColumnDatas_) {
       int c = vp.first;
 
-      CQModelViewFilterEdit *le = filterEdits_[ic];
+      auto *le = filterEdits_[ic];
 
       le->setColumn(c);
 
@@ -960,7 +1119,7 @@ updateWidgetGeometries()
   }
   else {
     for (int c = 0; c < nvc_; ++c) {
-      CQModelViewFilterEdit *le = filterEdits_[c];
+      auto *le = filterEdits_[c];
 
       le->setVisible(false);
     }
@@ -1256,19 +1415,19 @@ drawAlternateEmpty(QPainter *painter)
       auto pr = rowDatas_.find(flatRow);
       assert(pr != rowDatas_.end());
 
-      const RowData &rowData = (*pr).second;
+      const auto &rowData = (*pr).second;
 
       //---
 
       auto pp = visRowDatas_.find(rowData.parent);
       assert(pp != visRowDatas_.end());
 
-      const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+      const auto &rowVisRowDatas = (*pp).second;
 
       auto ppr = rowVisRowDatas.find(rowData.row);
       assert(ppr != rowVisRowDatas.end());
 
-      const VisRowData &visRowData = (*ppr).second;
+      const auto &visRowData = (*ppr).second;
 
       alternate = (visRowData.flatRow & 1);
     }
@@ -1312,10 +1471,10 @@ drawGrid(QPainter *painter)
   setRolePen(painter, ColorRole::GridFg);
 
   for (const auto &pp : visRowDatas_) {
-    const RowVisRowDatas &rowVisRowDatas = pp.second;
+    const auto &rowVisRowDatas = pp.second;
 
     for (const auto &pr : rowVisRowDatas) {
-      const VisRowData &visRowData = pr.second;
+      const auto &visRowData = pr.second;
 
       int x1 = visRowData.rect.left();
 //    int y1 = visRowData.rect.top();
@@ -1328,7 +1487,7 @@ drawGrid(QPainter *painter)
   int y1 = 0;
 
   for (const auto &pv : visColumnDatas_) {
-    const VisColumnData &visColumnData = pv.second;
+    const auto &visColumnData = pv.second;
 
     if (! visColumnData.visible)
       continue;
@@ -1394,19 +1553,19 @@ drawCellsRows(QPainter *painter) const
     auto pr = rowDatas_.find(flatRow);
     assert(pr != rowDatas_.end());
 
-    const RowData &rowData = (*pr).second;
+    const auto &rowData = (*pr).second;
 
     //---
 
     auto pp = visRowDatas_.find(rowData.parent);
     if (pp == visRowDatas_.end()) continue;
 
-    const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+    const auto &rowVisRowDatas = (*pp).second;
 
     auto ppr = rowVisRowDatas.find(rowData.row);
     if (ppr == rowVisRowDatas.end()) continue;
 
-    const VisRowData &visRowData = (*ppr).second;
+    const auto &visRowData = (*ppr).second;
 
     //---
 
@@ -1450,7 +1609,7 @@ drawCellsSelection(QPainter *painter) const
       }
 
       int getValue(int x, int y) const {
-        const VisCellData *vc = cellAreas[y*nc + x];
+        const auto *vc = cellAreas[y*nc + x];
 
         return (vc && vc->selected ? 1 : 0);
       }
@@ -1459,14 +1618,14 @@ drawCellsSelection(QPainter *painter) const
       int              nc { 0 };
     };
 
-    using LargestRect = CLargestRect<CLargestRectData,int>;
+    using LargestRect = CLargestRect<CLargestRectData, int>;
 
     for (auto &p : selDepthHierCellAreas_) {
-      const HierCellAreas &hierCellAreas = p.second;
+      const auto &hierCellAreas = p.second;
 
       for (auto &p1 : hierCellAreas) {
         // selection in flat hierarchical area
-        const CellAreas &cellAreas = p1.second;
+        const auto &cellAreas = p1.second;
 
         // vis grid
         int na = cellAreas.size();
@@ -1502,8 +1661,8 @@ drawCellsSelection(QPainter *painter) const
           int c1 = lrect.left;
           int c2 = lrect.left + lrect.width - 1;
 
-          const VisCellData *vc1 = cellAreas[r1*nc_ + c1];
-          const VisCellData *vc2 = cellAreas[r2*nc_ + c2];
+          const auto *vc1 = cellAreas[r1*nc_ + c1];
+          const auto *vc2 = cellAreas[r2*nc_ + c2];
           assert(vc1 && vc2);
 
           int x1 = vc1->rect.left  ();
@@ -1523,7 +1682,7 @@ drawCellsSelection(QPainter *painter) const
             for (int c = 0; c < lrect.width; ++c) {
               int c1 = lrect.left + c;
 
-              VisCellData *vc = cellAreas[r1*nc_ + c1];
+              auto *vc = cellAreas[r1*nc_ + c1];
 
               if (vc)
                 vc->selected = false;
@@ -1534,7 +1693,7 @@ drawCellsSelection(QPainter *painter) const
     }
 
     for (auto &cp : visCellDatas_) {
-      const VisCellData &visCellData = cp.second;
+      const auto &visCellData = cp.second;
 
       if (visCellData.selected)
         drawSelection(visCellData.rect);
@@ -1542,7 +1701,7 @@ drawCellsSelection(QPainter *painter) const
   }
   else {
     for (auto it = selection.constBegin(); it != selection.constEnd(); ++it) {
-      const QItemSelectionRange &range = *it;
+      const auto &range = *it;
 
       auto pc1 = visColumnDatas_.find(range.left ());
       auto pc2 = visColumnDatas_.find(range.right());
@@ -1551,13 +1710,13 @@ drawCellsSelection(QPainter *painter) const
       int x2 = paintData_.vrect.right();
 
       if (pc1 != visColumnDatas_.end()) {
-        const VisColumnData &visColumnData1 = (*pc1).second;
+        const auto &visColumnData1 = (*pc1).second;
 
         x1 = visColumnData1.rect.left ();
       }
 
       if (pc2 != visColumnDatas_.end()) {
-        const VisColumnData &visColumnData2 = (*pc2).second;
+        const auto &visColumnData2 = (*pc2).second;
 
         x2 = visColumnData2.rect.right();
       }
@@ -1567,7 +1726,7 @@ drawCellsSelection(QPainter *painter) const
       auto p = visRowDatas_.find(range.parent());
       if (p == visRowDatas_.end()) return;
 
-      const RowVisRowDatas &rowVisRowDatas = (*p).second;
+      const auto &rowVisRowDatas = (*p).second;
 
       auto pt = rowVisRowDatas.find(range.top());
       auto pb = rowVisRowDatas.find(range.bottom());
@@ -1576,13 +1735,13 @@ drawCellsSelection(QPainter *painter) const
       int y2 = paintData_.vrect.bottom();
 
       if (pt != rowVisRowDatas.end()) {
-        const VisRowData &visRowData1 = (*pt).second;
+        const auto &visRowData1 = (*pt).second;
 
         y1 = visRowData1.rect.top();
       }
 
       if (pb != rowVisRowDatas.end()) {
-        const VisRowData &visRowData2 = (*pb).second;
+        const auto &visRowData2 = (*pb).second;
 
         y2 = visRowData2.rect.bottom();
       }
@@ -1605,7 +1764,7 @@ updateHierSelection(const QItemSelection &selection)
     selDepthHierCellAreas_.clear();
 
     for (auto &cp : visCellDatas_) {
-      VisCellData &visCellData = cp.second;
+      auto &visCellData = cp.second;
 
       visCellData.selected = false;
     }
@@ -1620,7 +1779,7 @@ updateHierSelection(const QItemSelection &selection)
           auto pc = visCellDatas_.find(ind);
           if (pc == visCellDatas_.end()) continue;
 
-          VisCellData &visCellData = (*pc).second;
+          auto &visCellData = (*pc).second;
 
           visCellData.selected = true;
         }
@@ -1628,7 +1787,7 @@ updateHierSelection(const QItemSelection &selection)
     }
 
     for (auto &cp : visCellDatas_) {
-      VisCellData &vc = cp.second;
+      auto &vc = cp.second;
 
       if (vc.selected) {
         CellAreas &cellAreas = selDepthHierCellAreas_[-vc.depth][vc.parentFlatRow];
@@ -1664,7 +1823,7 @@ drawHHeader(QPainter *painter) const
   paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
-  if (showGrid())
+  if (showHHeaderLines())
     initDrawGrid();
 
   //---
@@ -1676,8 +1835,8 @@ drawHHeader(QPainter *painter) const
   painter->save();
 
   for (const auto &pv : visColumnDatas_) {
-    int                  c             = pv.first;
-    const VisColumnData &visColumnData = pv.second;
+    int         c             = pv.first;
+    const auto &visColumnData = pv.second;
 
     if (! visColumnData.visible)
       continue;
@@ -1710,7 +1869,7 @@ drawHHeader(QPainter *painter) const
     auto p = visColumnDatas_.find(freezeColumn_);
     assert(p != visColumnDatas_.end());
 
-    const VisColumnData &visColumnData = (*p).second;
+    const auto &visColumnData = (*p).second;
 
     painter->setClipRect(QRect(0, 0, freezeWidth_, globalRowData_.headerHeight));
 
@@ -1724,8 +1883,8 @@ drawHHeader(QPainter *painter) const
     int fh = paintData_.fm.height();
 
     for (const auto &pr : rowColumnSpans_) {
-      int                r           = pr.first;
-      const ColumnSpans &columnSpans = pr.second;
+      int         r           = pr.first;
+      const auto &columnSpans = pr.second;
 
       int y1 = r*(fh + 1) + globalRowData_.margin;
       int y2 = y1 + fh;
@@ -1738,8 +1897,8 @@ drawHHeader(QPainter *painter) const
         auto ps2 = visColumnDatas_.find(c2);
         if (ps1 == visColumnDatas_.end() || ps2 == visColumnDatas_.end()) continue;
 
-        const VisColumnData &visColumnData1 = (*ps1).second;
-        const VisColumnData &visColumnData2 = (*ps2).second;
+        const auto &visColumnData1 = (*ps1).second;
+        const auto &visColumnData2 = (*ps2).second;
 
         QRect rect(visColumnData1.rect.left(), y1,
                    visColumnData2.rect.right() - visColumnData1.rect.left() + 1, y2 - y1 + 1);
@@ -1906,7 +2065,7 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
       auto ps = rowColumnSpans_.find(r);
 
       if (ps != rowColumnSpans_.end()) {
-        const ColumnSpans &columnSpans = (*ps).second;
+        const auto &columnSpans = (*ps).second;
 
         for (const auto &span : columnSpans) {
           if (c >= span.first && c <= span.second) {
@@ -1997,7 +2156,7 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
 
   //---
 
-  if (showGrid()) {
+  if (showHHeaderLines()) {
     setRolePen(painter, ColorRole::GridFg);
 
     painter->drawLine(option.rect.topRight(), option.rect.bottomRight());
@@ -2065,7 +2224,7 @@ drawVHeader(QPainter *painter) const
   paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
-  if (showGrid())
+  if (showVHeaderLines())
     initDrawGrid();
 
   //---
@@ -2083,19 +2242,19 @@ drawVHeader(QPainter *painter) const
     auto pr = rowDatas_.find(flatRow);
     assert(pr != rowDatas_.end());
 
-    const RowData &rowData = (*pr).second;
+    const auto &rowData = (*pr).second;
 
     //---
 
     auto pp = visRowDatas_.find(rowData.parent);
     if (pp == visRowDatas_.end()) continue;
 
-    const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+    const auto &rowVisRowDatas = (*pp).second;
 
     auto ppr = rowVisRowDatas.find(rowData.row);
     if (ppr == rowVisRowDatas.end()) continue;
 
-    const VisRowData &visRowData = (*ppr).second;
+    const auto &visRowData = (*ppr).second;
 
     //---
 
@@ -2182,7 +2341,7 @@ drawVHeader(QPainter *painter) const
 
     //---
 
-    if (showGrid()) {
+    if (showVHeaderLines()) {
       setRolePen(painter, ColorRole::GridFg);
 
       int x1 = option.rect.left  ();
@@ -2207,8 +2366,8 @@ drawRow(QPainter *painter, int r, const QModelIndex &parent, const VisRowData &v
   painter->save();
 
   for (const auto &pv : visColumnDatas_) {
-    int                  c             = pv.first;
-    const VisColumnData &visColumnData = pv.second;
+    int         c             = pv.first;
+    const auto &visColumnData = pv.second;
 
     if (! visColumnData.visible)
       continue;
@@ -2244,7 +2403,7 @@ drawRow(QPainter *painter, int r, const QModelIndex &parent, const VisRowData &v
     auto pv = visColumnDatas_.find(freezeColumn_);
     assert(pv != visColumnDatas_.end());
 
-    const VisColumnData &visColumnData = (*pv).second;
+    const auto &visColumnData = (*pv).second;
 
     int y = visRowData.rect.top();
 
@@ -2273,7 +2432,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
     auto pc = ivisCellDatas_.find(ind);
     if (pc == ivisCellDatas_.end()) return;
 
-    const VisCellData &ivisCellData = (*pc).second;
+    const auto &ivisCellData = (*pc).second;
 
     //---
 
@@ -2333,7 +2492,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
   auto pc = visCellDatas_.find(ind);
   if (pc == visCellDatas_.end()) return;
 
-  const VisCellData &visCellData = (*pc).second;
+  const auto &visCellData = (*pc).second;
 
   //---
 
@@ -2451,7 +2610,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
     fillBackground();
 
-    CQItemDelegate *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
+    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
 
     if (idelegate) {
       const ColumnData &columnData = columnDatas_[c];
@@ -2670,7 +2829,7 @@ updateVisRows()
     y1 = -verticalOffset()*rowHeight;
 
   for (const auto &pr : rowDatas_) {
-    const RowData &rowData = pr.second;
+    const auto &rowData = pr.second;
 
     //---
 
@@ -2729,8 +2888,8 @@ updateVisCells()
   ivisCellDatas_.clear();
 
   for (const auto &pc : visColumnDatas_) {
-    int                  c             = pc.first;
-    const VisColumnData &visColumnData = pc.second;
+    int         c             = pc.first;
+    const auto &visColumnData = pc.second;
 
     int x1 = visColumnData.rect.left () - paintData_.margin;
     int x2 = visColumnData.rect.right() + paintData_.margin;
@@ -2739,7 +2898,7 @@ updateVisCells()
       auto pr = rowDatas_.find(flatRow);
       assert(pr != rowDatas_.end());
 
-      const RowData &rowData = (*pr).second;
+      const auto &rowData = (*pr).second;
 
       //---
 
@@ -2816,7 +2975,7 @@ void
 CQModelView::
 editFilterSlot()
 {
-  CQModelViewFilterEdit *le = qobject_cast<CQModelViewFilterEdit *>(sender());
+  auto *le = qobject_cast<CQModelViewFilterEdit *>(sender());
   assert(le);
 
   filterColumn(le->column());
@@ -2826,7 +2985,7 @@ void
 CQModelView::
 filterColumn(int column)
 {
-  CQModelViewFilterEdit *le = filterEdits_[column];
+  auto *le = filterEdits_[column];
 
   QModelIndex parent = rootIndex();
 
@@ -2921,26 +3080,17 @@ handleMousePress()
 
   //---
 
+  mouseData_.pressData.currentInd = sm_->currentIndex();
+
+  // horizontal header section pressed
   if      (mouseData_.pressData.hsection >= 0) {
-    QItemSelection selection;
+    if (! (mouseData_.modifiers & Qt::ShiftModifier)) {
+      selectColumn(mouseData_.pressData.hsection, mouseData_.modifiers);
 
-    QModelIndex ind = model_->index(0, mouseData_.pressData.hsection, QModelIndex());
-
-    selection.select(ind, ind);
-
-    if (! (mouseData_.modifiers & Qt::ControlModifier))
-      sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Columns);
-    else
-      sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Columns);
-
-    //--
-
-    sm_->setCurrentIndex(ind, QItemSelectionModel::NoUpdate);
-
-    //--
-
-    redraw();
+      redraw();
+    }
   }
+  // horizontal header section handle pressed
   else if (mouseData_.pressData.hsectionh >= 0) {
     const ColumnData &columnData = columnDatas_[mouseData_.pressData.hsectionh];
 
@@ -2948,37 +3098,17 @@ handleMousePress()
 
     mouseData_.headerWidth = cw;
   }
+  // vertical header section pressed
   else if (mouseData_.pressData.vsection >= 0) {
-    QItemSelection selection;
+    if (! (mouseData_.modifiers & Qt::ShiftModifier)) {
+      selectRow(mouseData_.pressData.vsection, mouseData_.modifiers);
 
-    QModelIndex ind = model_->index(mouseData_.pressData.vsection, 0, QModelIndex());
-
-    selection.select(ind, ind);
-
-    if (! (mouseData_.modifiers & Qt::ControlModifier))
-      sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    else
-      sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-
-    //--
-
-    sm_->setCurrentIndex(ind, QItemSelectionModel::NoUpdate);
-
-    redraw();
+      redraw();
+    }
   }
+  // table row/column selected
   else if (mouseData_.pressData.ind.isValid()) {
-    QItemSelection selection;
-
-    selection.select(mouseData_.pressData.ind, mouseData_.pressData.ind);
-
-    if (! (mouseData_.modifiers & Qt::ControlModifier))
-      sm_->select(selection, QItemSelectionModel::ClearAndSelect);
-    else
-      sm_->select(selection, QItemSelectionModel::Select);
-
-    //--
-
-    sm_->setCurrentIndex(mouseData_.pressData.ind, QItemSelectionModel::NoUpdate);
+    selectCell(mouseData_.pressData.ind, mouseData_.modifiers);
 
     redraw();
   }
@@ -3017,29 +3147,17 @@ void
 CQModelView::
 handleMouseMove()
 {
+  // horizontal header section pressed
   if      (mouseData_.pressData.hsection >= 0) {
     if (mouseData_.moveData.hsection < 0)
       return;
 
-    int c1 = std::min(mouseData_.pressData.hsection, mouseData_.moveData.hsection);
-    int c2 = std::max(mouseData_.pressData.hsection, mouseData_.moveData.hsection);
-
-    QItemSelection selection;
-
-    QModelIndex parent = rootIndex();
-
-    QModelIndex ind1 = model_->index(0, c1, parent);
-    QModelIndex ind2 = model_->index(0, c2, parent);
-
-    selection.select(ind1, ind2);
-
-    if (! (mouseData_.modifiers & Qt::ControlModifier))
-      sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Columns);
-    else
-      sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Columns);
+    selectColumnRange(mouseData_.pressData.hsection, mouseData_.moveData.hsection,
+                      mouseData_.modifiers);
 
     redraw();
   }
+  // horizontal header section handle pressed
   else if (mouseData_.pressData.hsectionh >= 0) {
     int dx = mouseData_.moveData.pos.x() - mouseData_.pressData.pos.x();
 
@@ -3055,30 +3173,20 @@ handleMouseMove()
 
     emit stateChanged();
   }
+  // vertical header section pressed
   else if (mouseData_.pressData.vsection >= 0) {
     if (mouseData_.moveData.vsection < 0)
       return;
 
-    int r1 = std::min(mouseData_.pressData.vsection, mouseData_.moveData.vsection);
-    int r2 = std::max(mouseData_.pressData.vsection, mouseData_.moveData.vsection);
-
-    QItemSelection selection;
-
-    QModelIndex parent = rootIndex();
-
-    QModelIndex ind1 = model_->index(r1, 0, parent);
-    QModelIndex ind2 = model_->index(r2, 0, parent);
-
-    selection.select(ind1, ind2);
-
-    if (! (mouseData_.modifiers & Qt::ControlModifier))
-      sm_->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    else
-      sm_->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    selectRowRange(mouseData_.pressData.vsection, mouseData_.moveData.vsection,
+                   mouseData_.modifiers);
 
     redraw();
   }
+  // table row/column selected
   else if (mouseData_.pressData.ind.isValid() && mouseData_.moveData.ind.isValid()) {
+    mouseData_.moveData.currentInd = sm_->currentIndex();
+
     // TODO: hierarchical will need more work
     if (isHierarchical()) {
       QRect rect(mouseData_.pressData.pos, mouseData_.moveData.pos);
@@ -3087,32 +3195,13 @@ handleMouseMove()
         setSelection(rect, QItemSelectionModel::ClearAndSelect);
       else
         setSelection(rect, QItemSelectionModel::Select);
+
+      sm_->setCurrentIndex(mouseData_.moveData.ind, QItemSelectionModel::NoUpdate);
     }
     else {
-      int c1 = std::min(mouseData_.pressData.ind.column(), mouseData_.moveData.ind.column());
-      int c2 = std::max(mouseData_.pressData.ind.column(), mouseData_.moveData.ind.column());
-
-      int r1 = std::min(mouseData_.pressData.ind.row(), mouseData_.moveData.ind.row());
-      int r2 = std::max(mouseData_.pressData.ind.row(), mouseData_.moveData.ind.row());
-
-      QModelIndex parent = rootIndex();
-
-      QModelIndex ind1 = model_->index(r1, c1, parent);
-      QModelIndex ind2 = model_->index(r2, c2, parent);
-
-      QItemSelection selection;
-
-      selection.select(ind1, ind2);
-
-      if (! (mouseData_.modifiers & Qt::ControlModifier))
-        sm_->select(selection, QItemSelectionModel::ClearAndSelect);
-      else
-        sm_->select(selection, QItemSelectionModel::Select);
+      selectCellRange(mouseData_.pressData.ind, mouseData_.moveData.ind,
+                      mouseData_.modifiers);
     }
-
-    //--
-
-    sm_->setCurrentIndex(mouseData_.moveData.ind, QItemSelectionModel::NoUpdate);
 
     scrollTo(mouseData_.moveData.ind);
 
@@ -3153,6 +3242,60 @@ handleMouseRelease()
     click = (mouseData_.pressData.hsection == mouseData_.releaseData.hsection);
   else if (mouseData_.pressData.vsection >= 0)
     click = (mouseData_.pressData.vsection == mouseData_.releaseData.vsection);
+
+  //---
+
+  // vertical header section pressed
+  if      (mouseData_.pressData.hsection >= 0) {
+    if (mouseData_.modifiers & Qt::ShiftModifier) {
+      int currentSection = -1;
+
+      if (click) {
+        QModelIndex start = mouseData_.pressData.currentInd;
+        if (! start.isValid()) return;
+
+        currentSection = start.column();
+      }
+      else {
+        if (mouseData_.moveData.hsection < 0)
+          return;
+
+        currentSection = mouseData_.moveData.hsection;
+      }
+
+      selectColumnRange(mouseData_.pressData.hsection, currentSection, mouseData_.modifiers);
+
+      redraw();
+    }
+  }
+  // horizontal header section pressed
+  else if (mouseData_.pressData.vsection >= 0) {
+    if (mouseData_.modifiers & Qt::ShiftModifier) {
+      int currentSection = -1;
+
+      if (click) {
+        QModelIndex start = mouseData_.pressData.currentInd;
+        if (! start.isValid()) return;
+
+        currentSection = start.row();
+      }
+      else {
+        if (mouseData_.moveData.vsection < 0)
+          return;
+
+        currentSection = mouseData_.moveData.vsection;
+      }
+
+      selectRowRange(mouseData_.pressData.vsection, currentSection, mouseData_.modifiers);
+
+      redraw();
+    }
+  }
+  // table row/column selected
+  else if (mouseData_.pressData.ind.isValid() && mouseData_.moveData.ind.isValid()) {
+  }
+
+  //---
 
   if (click) {
     if      (mouseData_.pressData.iind.isValid())
@@ -3311,7 +3454,7 @@ showMenu(const QPoint &pos)
 
   //---
 
-  QMenu *menu = new QMenu;
+  auto *menu = new QMenu;
 
   //---
 
@@ -3337,7 +3480,7 @@ addMenuActions(QMenu *menu)
   //---
 
   auto addMenu = [&](const QString &name) {
-    QMenu *subMenu = new QMenu(name);
+    auto *subMenu = new QMenu(name);
 
     menu->addMenu(subMenu);
 
@@ -3345,7 +3488,7 @@ addMenuActions(QMenu *menu)
   };
 
   auto addAction = [&](QMenu *menu, const QString &name, const char *slotName) {
-    QAction *action = menu->addAction(name);
+    auto *action = menu->addAction(name);
 
     connect(action, SIGNAL(triggered()), this, slotName);
 
@@ -3354,7 +3497,7 @@ addMenuActions(QMenu *menu)
 
   auto addCheckedAction = [&](QMenu *menu, const QString &name, bool checked,
                               const char *slotName) {
-    QAction *action = menu->addAction(name);
+    auto *action = menu->addAction(name);
 
     action->setCheckable(true);
     action->setChecked  (checked);
@@ -3366,7 +3509,7 @@ addMenuActions(QMenu *menu)
 
   //---
 
-  QMenu *optionMenu = addMenu("Options");
+  auto *optionMenu = addMenu("Options");
 
   addCheckedAction(optionMenu, "Alternating Row Colors", alternatingRowColors(),
                    SLOT(alternatingRowColorsSlot(bool)));
@@ -3387,7 +3530,7 @@ addMenuActions(QMenu *menu)
 
   //---
 
-  QMenu *sortMenu = addMenu("Sort");
+  auto *sortMenu = addMenu("Sort");
 
   if (column >= 0) {
     bool isCurrent = (isSortingEnabled() && column == hh_->sortIndicatorSection());
@@ -3408,7 +3551,7 @@ addMenuActions(QMenu *menu)
 
   //---
 
-  QMenu *filterMenu = addMenu("Filter");
+  auto *filterMenu = addMenu("Filter");
 
   addCheckedAction(filterMenu, "Show Filter", isShowFilter(), SLOT(showFilterSlot(bool)))->
     setIcon(QIcon(QPixmap::fromImage(FILTER_SVG().image(is, is))));
@@ -3418,7 +3561,7 @@ addMenuActions(QMenu *menu)
 
   //---
 
-  QMenu *fitMenu = addMenu("Fit");
+  auto *fitMenu = addMenu("Fit");
 
   addAction(fitMenu, "Fit All Columns", SLOT(fitAllColumnsSlot()))->
     setIcon(QIcon(QPixmap::fromImage(FIT_ALL_COLUMNS_SVG().image(is, is))));
@@ -3432,7 +3575,7 @@ addMenuActions(QMenu *menu)
 
   //--
 
-  QMenu *showHideMenu = addMenu("Show/Hide");
+  auto *showHideMenu = addMenu("Show/Hide");
 
   addAction(showHideMenu, "Hide Column", SLOT(hideColumnSlot()));
 
@@ -3442,7 +3585,7 @@ addMenuActions(QMenu *menu)
   //--
 
   if (isHierarchical()) {
-    QMenu *expandCollapseMenu = addMenu("Expand/Collapse");
+    auto *expandCollapseMenu = addMenu("Expand/Collapse");
 
     if (mouseData_.menuData.calcInd().isValid()) {
       bool expanded = isExpanded(mouseData_.menuData.calcInd());
@@ -3460,10 +3603,10 @@ addMenuActions(QMenu *menu)
   //---
 
   if (column >= 0) {
-    CQItemDelegate *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
+    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
 
     if (idelegate && idelegate->isNumericColumn(column)) {
-      QMenu *decorationMenu = addMenu("Decoration");
+      auto *decorationMenu = addMenu("Decoration");
 
       const ColumnData &columnData = columnDatas_[column];
 
@@ -3475,7 +3618,7 @@ addMenuActions(QMenu *menu)
   //---
 
   if (isHierarchical()) {
-    QMenu *rootMenu = addMenu("Root");
+    auto *rootMenu = addMenu("Root");
 
     addAction(rootMenu, "Set Root", SLOT(setRootSlot()));
 
@@ -3806,7 +3949,7 @@ expandAll()
   IndexSet inds;
 
   for (const auto &pr : rowDatas_) {
-    const RowData &rowData = pr.second;
+    const auto &rowData = pr.second;
 
     if (rowData.children && rowData.expanded) {
       QModelIndex index = model_->index(rowData.row, 0, rowData.parent);
@@ -3940,7 +4083,7 @@ filterByValueSlot()
   if (ind.isValid()) {
     QString str = model_->data(ind, Qt::DisplayRole).toString();
 
-    CQModelViewFilterEdit *le = filterEdits_[ind.column()];
+    auto *le = filterEdits_[ind.column()];
 
     le->setText(str);
 
@@ -4011,10 +4154,12 @@ resizeColumnToContents(int column)
   //---
 
   int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  int ispace = 4;
 
-  if (hh_->isSortIndicatorShown()) {
-    maxWidth += paintData_.fm.height() + 2*margin;
-  }
+  maxWidth += 2*margin + 2*ispace;
+
+  if (hh_->isSortIndicatorShown())
+    maxWidth += paintData_.fm.height() + margin;
 
   //---
 
@@ -4145,12 +4290,12 @@ scrollTo(const QModelIndex &index, ScrollHint)
   auto pp = visRowDatas_.find(index.parent());
   if (pp == visRowDatas_.end()) return;
 
-  const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+  const auto &rowVisRowDatas = (*pp).second;
 
   auto pr = rowVisRowDatas.find(index.row());
   if (pr == rowVisRowDatas.end()) return;
 
-  const VisRowData &visRowData = (*pr).second;
+  const auto &visRowData = (*pr).second;
 
   int vh = viewport()->geometry().height();
 
@@ -4212,7 +4357,7 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
     auto pp = visRowDatas_.find(parent);
     if (pp == visRowDatas_.end()) return QModelIndex();
 
-    const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+    const auto &rowVisRowDatas = (*pp).second;
 
     auto pr = rowVisRowDatas.find(r);
     if (pr == rowVisRowDatas.end()) return QModelIndex();
@@ -4233,7 +4378,7 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
     auto pp = visRowDatas_.find(parent);
     if (pp == visRowDatas_.end()) return QModelIndex();
 
-    const RowVisRowDatas &rowVisRowDatas = (*pp).second;
+    const auto &rowVisRowDatas = (*pp).second;
 
     auto pr = rowVisRowDatas.find(r);
     if (pr == rowVisRowDatas.end()) return QModelIndex();
@@ -4257,7 +4402,7 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
       auto pr = rowDatas_.find(currentFlatRow_);
 
       if (pr != rowDatas_.end()) {
-        const RowData &rowData = (*pr).second;
+        const auto &rowData = (*pr).second;
 
         if (rowData.children && rowData.expanded) {
           QModelIndex ind = model_->index(r, c, parent);
@@ -4284,7 +4429,7 @@ moveCursor(CursorAction action, Qt::KeyboardModifiers modifiers)
       auto pr = rowDatas_.find(currentFlatRow_);
 
       if (pr != rowDatas_.end()) {
-        const RowData &rowData = (*pr).second;
+        const auto &rowData = (*pr).second;
 
         if (rowData.children && ! rowData.expanded) {
           QModelIndex ind = model_->index(r, c, parent);
@@ -4374,13 +4519,15 @@ setSelection(const QRect &rect, QItemSelectionModel::SelectionFlags flags)
   QItemSelection selection;
 
   for (const auto &cp : visCellDatas_) {
-    const VisCellData &visCellData = cp.second;
+    const auto &visCellData = cp.second;
 
     if (visCellData.rect.intersects(rect))
       selection.select(cp.first, cp.first);
   }
 
   sm_->select(selection, flags);
+
+  // TODO: current index ?
 }
 
 QRegion
@@ -4406,7 +4553,7 @@ cellPositionToIndex(PositionData &posData) const
   posData.reset();
 
   for (const auto &cp : visCellDatas_) {
-    const VisCellData &visCellData = cp.second;
+    const auto &visCellData = cp.second;
 
     if (visCellData.rect.contains(posData.pos)) {
       posData.ind     = cp.first;
@@ -4417,7 +4564,7 @@ cellPositionToIndex(PositionData &posData) const
   }
 
   for (const auto &cp : ivisCellDatas_) {
-    const VisCellData &visCellData = cp.second;
+    const auto &visCellData = cp.second;
 
     if (visCellData.rect.contains(posData.pos)) {
       posData.iind    = cp.first;
@@ -4441,7 +4588,7 @@ hheaderPositionToIndex(PositionData &posData) const
   posData.reset();
 
   for (const auto &vp : visColumnDatas_) {
-    const VisColumnData &visColumnData = vp.second;
+    const auto &visColumnData = vp.second;
 
     if (visColumnData.rect.contains(posData.pos)) {
       posData.hsection = vp.first;
@@ -4470,10 +4617,10 @@ vheaderPositionToIndex(PositionData &posData) const
   posData.reset();
 
   for (const auto &pp : visRowDatas_) {
-    const RowVisRowDatas &rowVisRowDatas = pp.second;
+    const auto &rowVisRowDatas = pp.second;
 
     for (const auto &pr : rowVisRowDatas) {
-      const VisRowData &visRowData = pr.second;
+      const auto &visRowData = pr.second;
 
       if (visRowData.rect.contains(posData.pos)) {
         posData.vsection = visRowData.flatRow;

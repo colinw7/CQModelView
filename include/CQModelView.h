@@ -65,6 +65,8 @@ class CQModelView : public QAbstractItemView {
 
   // qtableview
   Q_PROPERTY(bool showGrid             READ showGrid              WRITE setShowGrid           )
+  Q_PROPERTY(bool showHHeaderLines     READ showHHeaderLines      WRITE setShowHHeaderLines   )
+  Q_PROPERTY(bool showVHeaderLines     READ showVHeaderLines      WRITE setShowVHeaderLines   )
   Q_PROPERTY(bool cornerButtonEnabled  READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
 
   Q_PROPERTY(Qt::PenStyle gridStyle READ gridStyle WRITE setGridStyle)
@@ -112,7 +114,20 @@ class CQModelView : public QAbstractItemView {
   void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight,
                    const QVector<int> &roles = QVector<int>()) override;
 
+  //---
+
+  void selectColumn     (int section, Qt::KeyboardModifiers modifiers);
+  void selectColumnRange(int section1, int section2, Qt::KeyboardModifiers modifiers);
+  void selectRow        (int section, Qt::KeyboardModifiers modifiers);
+  void selectRowRange   (int section1, int section2, Qt::KeyboardModifiers modifiers);
+
+  void selectCell(const QModelIndex &ind, Qt::KeyboardModifiers modifiers);
+  void selectCellRange(const QModelIndex &ind1, const QModelIndex &ind2,
+                       Qt::KeyboardModifiers modifiers);
+
   void selectAll() override;
+
+  //---
 
   void scrollContentsBy(int dx, int dy) override;
 
@@ -177,6 +192,12 @@ class CQModelView : public QAbstractItemView {
 
   bool showGrid() const { return showGrid_; }
   void setShowGrid(bool b);
+
+  bool showHHeaderLines() const { return showHHeaderLines_; }
+  void setShowHHeaderLines(bool b);
+
+  bool showVHeaderLines() const { return showVHeaderLines_; }
+  void setShowVHeaderLines(bool b);
 
   const Qt::PenStyle &gridStyle() const { return gridStyle_; }
   void setGridStyle(const Qt::PenStyle &s) { gridStyle_ = s; }
@@ -294,15 +315,17 @@ class CQModelView : public QAbstractItemView {
     int         vsection  { -1 };
     QModelIndex ind;
     QModelIndex iind;
+    QModelIndex currentInd;
     int         flatRow   { -1 };
     QRect       rect;
 
     void reset() {
-      hsection  = -1;
-      hsectionh = -1;
-      vsection  = -1;
-      ind       = QModelIndex();
-      iind      = QModelIndex();
+      hsection   = -1;
+      hsectionh  = -1;
+      vsection   = -1;
+      ind        = QModelIndex();
+      iind       = QModelIndex();
+      currentInd = QModelIndex();
     }
 
     int row() const {
@@ -606,7 +629,7 @@ class CQModelView : public QAbstractItemView {
     int nv   { -1 };
   };
 
-  using RoleColors = std::map<ColorRole,QColor>;
+  using RoleColors = std::map<ColorRole, QColor>;
 
   struct PaintData {
     PaintData(CQModelView *view) :
@@ -646,21 +669,21 @@ class CQModelView : public QAbstractItemView {
   using SelModelP          = QPointer<QItemSelectionModel>;
   using DelegateP          = QPointer<QAbstractItemDelegate>;
   using ColumnDatas        = std::vector<ColumnData>;
-  using RowDatas           = std::map<int,RowData>;
-  using IndRow             = std::map<QModelIndex,int>;
-  using VisColumnDatas     = std::map<int,VisColumnData>;          // column data
-  using RowVisRowDatas     = std::map<int,VisRowData>;             // row data
-  using VisRowDatas        = std::map<QModelIndex,RowVisRowDatas>; // parent rows
+  using RowDatas           = std::map<int, RowData>;
+  using IndRow             = std::map<QModelIndex, int>;
+  using VisColumnDatas     = std::map<int, VisColumnData>;          // column data
+  using RowVisRowDatas     = std::map<int, VisRowData>;             // row data
+  using VisRowDatas        = std::map<QModelIndex, RowVisRowDatas>; // parent rows
   using VisFlatRows        = std::vector<int>;
-  using VisCellDatas       = std::map<QModelIndex,VisCellData>;
+  using VisCellDatas       = std::map<QModelIndex, VisCellData>;
   using FilterEdits        = std::vector<CQModelViewFilterEdit*>;
   using IndexSet           = std::set<QModelIndex>;
-  using ColumnSpan         = std::pair<int,int>;
+  using ColumnSpan         = std::pair<int, int>;
   using ColumnSpans        = std::vector<ColumnSpan>;
-  using RowColumnSpans     = std::map<int,ColumnSpans>;
+  using RowColumnSpans     = std::map<int, ColumnSpans>;
   using CellAreas          = std::vector<VisCellData *>;
-  using HierCellAreas      = std::map<int,CellAreas>;
-  using DepthHierCellAreas = std::map<int,HierCellAreas>;
+  using HierCellAreas      = std::map<int, CellAreas>;
+  using DepthHierCellAreas = std::map<int, HierCellAreas>;
 
   ModelP    model_;
   SelModelP sm_;
@@ -674,8 +697,10 @@ class CQModelView : public QAbstractItemView {
 
   bool sortingEnabled_     { false };
 
-  bool         showGrid_   { false };
-  Qt::PenStyle gridStyle_  { Qt::SolidLine };
+  bool         showGrid_         { false };
+  bool         showHHeaderLines_ { true };
+  bool         showVHeaderLines_ { true };
+  Qt::PenStyle gridStyle_        { Qt::SolidLine };
 
   int  indentation_          { 20 };
   bool rootIsDecorated_      { true };
