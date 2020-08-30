@@ -43,6 +43,8 @@ class CQModelViewHeader : public QHeaderView {
 
   bool viewportEvent(QEvent *e) override;
 
+  bool event(QEvent *e) override;
+
   //---
 
   int horizontalOffset() const override;

@@ -313,6 +313,7 @@ class CQModelView : public QAbstractItemView {
     int         hsection  { -1 };
     int         hsectionh { -1 };
     int         vsection  { -1 };
+    int         vsectionh { -1 };
     QModelIndex ind;
     QModelIndex iind;
     QModelIndex currentInd;
@@ -323,6 +324,7 @@ class CQModelView : public QAbstractItemView {
       hsection   = -1;
       hsectionh  = -1;
       vsection   = -1;
+      vsectionh  = -1;
       ind        = QModelIndex();
       iind       = QModelIndex();
       currentInd = QModelIndex();
@@ -352,6 +354,7 @@ class CQModelView : public QAbstractItemView {
       return ((lhs.hsection  == rhs.hsection ) &&
               (lhs.hsectionh == rhs.hsectionh) &&
               (lhs.vsection  == rhs.vsection ) &&
+              (lhs.vsectionh == rhs.vsectionh) &&
               (lhs.ind       == rhs.ind      ) &&
               (lhs.iind      == rhs.iind     ));
     }

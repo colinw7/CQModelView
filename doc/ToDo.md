@@ -1,3 +1,4 @@
++ handle viewportEvent, event
 + Fit all columns does not fit headers
 + Shift select for indices does not work
 + VHeader tip wrong when scrolled

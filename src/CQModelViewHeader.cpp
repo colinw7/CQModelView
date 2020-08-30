@@ -2,6 +2,7 @@
 #include <CQModelView.h>
 #include <QPainter>
 #include <QMouseEvent>
+#include <QToolTip>
 #include <iostream>
 
 CQModelViewHeader::
@@ -231,11 +232,88 @@ contextMenuEvent(QContextMenuEvent *e)
 
 bool
 CQModelViewHeader::
+event(QEvent *e)
+{
+#if 0
+  switch (e->type()) {
+    case QEvent::HoverEnter: {
+      QHoverEvent *he = static_cast<QHoverEvent*>(e);
+      d->hover = logicalIndexAt(he->pos());
+      if (d->hover != -1)
+        updateSection(d->hover);
+      break;
+    }
+    case QEvent::Leave:
+    case QEvent::HoverLeave: {
+      if (d->hover != -1)
+        updateSection(d->hover);
+      d->hover = -1;
+      break;
+    }
+    case QEvent::HoverMove: {
+      QHoverEvent *he = static_cast<QHoverEvent*>(e);
+      int oldHover = d->hover;
+      d->hover = logicalIndexAt(he->pos());
+      if (d->hover != oldHover) {
+        if (oldHover != -1)
+          updateSection(oldHover);
+        if (d->hover != -1)
+          updateSection(d->hover);
+      }
+      break;
+    }
+    default: {
+      return QHeaderView::event(e);
+    }
+  }
+#else
+  return QHeaderView::event(e);
+#endif
+}
+
+bool
+CQModelViewHeader::
 viewportEvent(QEvent *e)
 {
   //std::cerr << "CQModelViewHeader::viewportEvent\n";
 
   // TODO: handle FontChange, StyleChange, Hide, Show (resizeSections, geometriesChanged)
+  switch (e->type()) {
+    case QEvent::ToolTip: {
+      QHelpEvent *he = static_cast<QHelpEvent*>(e);
+
+      CQModelView::PositionData posData;
+
+      posData.pos = he->pos();
+
+      int section = -1;
+
+      if (orientation() == Qt::Horizontal) {
+        view_->hheaderPositionToIndex(posData);
+
+        section = posData.hsection;
+      }
+      else {
+        view_->vheaderPositionToIndex(posData);
+
+        section = posData.vsection;
+      }
+
+      if (section != -1) {
+        QVariant variant = view_->model()->headerData(section, orientation(), Qt::ToolTipRole);
+
+        if (variant.isValid()) {
+          QToolTip::showText(he->globalPos(), variant.toString(), this);
+          return true;
+        }
+      }
+
+      return true;
+    }
+    default:
+      break;
+  }
+
   return QHeaderView::viewportEvent(e);
 }
 
@@ -375,5 +453,6 @@ CQModelViewHeader::
 redraw()
 {
   viewport()->update(viewport()->rect());
+
   update(rect());
 }

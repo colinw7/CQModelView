@@ -4627,6 +4627,14 @@ vheaderPositionToIndex(PositionData &posData) const
         posData.rect     = visRowData.rect;
         return true;
       }
+
+#if 0
+      if (visRowData.vrect.contains(posData.pos)) {
+        posData.vsectionh = visRowData.flatRow;
+        posData.rect      = visRowData.vrect;
+        return true;
+      }
+#endif
     }
   }
 
