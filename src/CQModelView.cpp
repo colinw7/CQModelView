@@ -75,6 +75,8 @@ CQModelView(QWidget *parent) :
 
   cornerWidget_ = new CQModelViewCornerButton(this);
 
+  cornerWidget_->setToolTip("Select All");
+
   // TODO: allow config
   connect(cornerWidget_, SIGNAL(clicked()), this, SLOT(selectAll()));
 }
