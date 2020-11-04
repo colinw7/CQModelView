@@ -4171,13 +4171,19 @@ resizeColumnToContents(int column)
 
   QModelIndex parent = rootIndex();
 
-  maxColumnWidth(column, parent, 0, nvr, maxWidth, maxRows);
+  int dataMaxWidth = 0;
+
+  maxColumnWidth(column, parent, 0, nvr, dataMaxWidth, maxRows);
+
+  dataMaxWidth += 2*margin + 2*ispace;
+
+  maxWidth = std::max(maxWidth, dataMaxWidth);
 
   //---
 
   ColumnData &columnData = columnDatas_[column];
 
-  columnData.width = std::max(maxWidth + 2*margin, 16);
+  columnData.width = std::max(maxWidth, 16);
 
   hh_->resizeSection(column, columnData.width);
 
@@ -4218,9 +4224,7 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
     for (int i = 0; i < nl; ++i) {
       const QString &str = strs[i];
 
-      w = paintData_.fm.width(str);
-
-      break;
+      w = std::max(w, paintData_.fm.width(str));
     }
 #else
     w = paintData_.fm.width(data.toString());
