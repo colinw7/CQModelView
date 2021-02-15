@@ -516,6 +516,8 @@ class CQModelView : public QAbstractItemView {
   void sortIncreasingSlot();
   void sortDecreasingSlot();
 
+  void selectionBehaviorSlot(QAction *action);
+
   void setRootSlot();
   void resetRootSlot();
 

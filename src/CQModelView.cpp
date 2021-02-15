@@ -1,3 +1,5 @@
+#define QT_KEYPAD_NAVIGATION 1
+
 #include <CQModelView.h>
 #include <CQModelViewHeader.h>
 #include <CQBaseModelTypes.h>
@@ -2509,8 +2511,18 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
   option.state &= ~QStyle::State_MouseOver;
 
-  if (ind == mouseData_.moveData.ind)
-    option.state |= QStyle::State_MouseOver;
+  if      (selectionBehavior() == SelectRows) {
+    if (ind.row() == mouseData_.moveData.ind.row())
+      option.state |= QStyle::State_MouseOver;
+  }
+  else if (selectionBehavior() == SelectColumns) {
+    if (ind.column() == mouseData_.moveData.ind.column())
+      option.state |= QStyle::State_MouseOver;
+  }
+  else {
+    if (ind == mouseData_.moveData.ind)
+      option.state |= QStyle::State_MouseOver;
+  }
 
   if (ind == currentIndex() && currentIndex().isValid())
     option.state |= QStyle::State_HasFocus;
@@ -2618,6 +2630,11 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
       const ColumnData &columnData = columnDatas_[c];
 
       idelegate->setHeatmap(columnData.heatmap);
+    }
+
+    if (option.state & QStyle::State_MouseOver) {
+      if (selectionBehavior() != SelectRows && selectionBehavior() != SelectColumns)
+        option.state |= QStyle::State_HasEditFocus;
     }
 
     delegate_->paint(painter, option, ind);
@@ -3110,7 +3127,12 @@ handleMousePress()
   }
   // table row/column selected
   else if (mouseData_.pressData.ind.isValid()) {
-    selectCell(mouseData_.pressData.ind, mouseData_.modifiers);
+    if      (selectionBehavior() == SelectRows)
+      selectRow(mouseData_.pressData.ind.row(), mouseData_.modifiers);
+    else if (selectionBehavior() == SelectColumns)
+      selectColumn(mouseData_.pressData.ind.column(), mouseData_.modifiers);
+    else
+      selectCell(mouseData_.pressData.ind, mouseData_.modifiers);
 
     redraw();
   }
@@ -3489,24 +3511,34 @@ addMenuActions(QMenu *menu)
     return subMenu;
   };
 
-  auto addAction = [&](QMenu *menu, const QString &name, const char *slotName) {
+  auto addAction = [&](QMenu *menu, const QString &name, const char *slotName=nullptr) {
     auto *action = menu->addAction(name);
 
-    connect(action, SIGNAL(triggered()), this, slotName);
+    if (slotName)
+      connect(action, SIGNAL(triggered()), this, slotName);
 
     return action;
   };
 
   auto addCheckedAction = [&](QMenu *menu, const QString &name, bool checked,
-                              const char *slotName) {
+                              const char *slotName=nullptr) {
     auto *action = menu->addAction(name);
 
     action->setCheckable(true);
     action->setChecked  (checked);
 
-    connect(action, SIGNAL(triggered(bool)), this, slotName);
+    if (slotName)
+      connect(action, SIGNAL(triggered(bool)), this, slotName);
 
     return action;
+  };
+
+  auto addActionGroup = [&](QMenu *menu, const char *slotName) {
+    auto *actionGroup = new QActionGroup(menu);
+
+    connect(actionGroup, SIGNAL(triggered(QAction *)), this, slotName);
+
+    return actionGroup;
   };
 
   //---
@@ -3550,6 +3582,21 @@ addMenuActions(QMenu *menu)
     addCheckedAction(sortMenu, "Enabled", isSortingEnabled(),
                      SLOT(sortingEnabledSlot(bool)));
   }
+
+  //---
+
+  auto *selectMenu = addMenu("Select");
+
+  auto *selectActionGroup = addActionGroup(selectMenu, SLOT(selectionBehaviorSlot(QAction *)));
+
+  selectActionGroup->addAction(
+    addCheckedAction(selectMenu, "Items"  , selectionBehavior() == SelectItems  ));
+  selectActionGroup->addAction(
+    addCheckedAction(selectMenu, "Rows"   , selectionBehavior() == SelectRows   ));
+  selectActionGroup->addAction(
+    addCheckedAction(selectMenu, "Columns", selectionBehavior() == SelectColumns));
+
+  selectMenu->addActions(selectActionGroup->actions());
 
   //---
 
@@ -3720,6 +3767,20 @@ sortDecreasingSlot()
     setSortingEnabled(true);
 
   sortByColumn(mouseData_.menuData.column(), Qt::DescendingOrder);
+}
+
+void
+CQModelView::
+selectionBehaviorSlot(QAction *action)
+{
+  if      (action->text() == "Items")
+    setSelectionBehavior(SelectItems);
+  else if (action->text() == "Rows")
+    setSelectionBehavior(SelectRows);
+  else if (action->text() == "Columns")
+    setSelectionBehavior(SelectColumns);
+  else
+    assert(false);
 }
 
 //------

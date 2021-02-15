@@ -31,7 +31,7 @@ class CQItemDelegate : public QItemDelegate {
 
  private:
   bool drawType(QPainter *painter, const QStyleOptionViewItem &option,
-                const QModelIndex &index) const;
+                const QModelIndex &index, int &type) const;
 
   bool drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
                        const QModelIndex &index) const;

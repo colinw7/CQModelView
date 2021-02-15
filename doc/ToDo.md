@@ -7,3 +7,4 @@
 + Extra rows above below visible for scroll
 . Escape close editor
 + corner button and icon
++ model view debug/speed/drag select

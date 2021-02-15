@@ -1,3 +1,5 @@
+#define QT_KEYPAD_NAVIGATION 1
+
 #include <CQItemDelegate.h>
 #include <CQBaseModelTypes.h>
 
@@ -22,20 +24,29 @@ void
 CQItemDelegate::
 paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
-  isEditable_  = (index.flags() & Qt::ItemIsEditable);
+  isEditable_  = (index.flags() & Qt::ItemIsEditable) &&
+                 (option.state & QStyle::State_HasEditFocus);
   isMouseOver_ = (option.state & QStyle::State_MouseOver);
 
-  if (! drawType(painter, option, index)) {
+  int itype;
+
+  if (! drawType(painter, option, index, itype)) {
     QItemDelegate::paint(painter, option, index);
 
-    if (isEditable_ && isMouseOver_)
-      drawEditImage(painter, option.rect, /*numeric*/false);
+    if (isEditable_ && isMouseOver_) {
+      CQBaseModelType type = (CQBaseModelType) itype;
+
+      bool numeric = (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER);
+
+      drawEditImage(painter, option.rect, numeric);
+    }
   }
 }
 
 bool
 CQItemDelegate::
-drawType(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+drawType(QPainter *painter, const QStyleOptionViewItem &option,
+         const QModelIndex &index, int &itype) const
 {
   QAbstractItemModel *model = view_->model();
   if (! model) return false;
@@ -44,25 +55,30 @@ drawType(QPainter *painter, const QStyleOptionViewItem &option, const QModelInde
 
   // get type
   // TODO: validate cast
-  CQBaseModelType type = CQBaseModelType::STRING;
+  auto type = CQBaseModelType::STRING;
 
   QVariant tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Type);
 
   if (! tvar.isValid())
     tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::BaseType);
 
-  if (! tvar.isValid())
-    return false;
+  if (tvar.isValid()) {
+    bool ok;
+    int itype = tvar.toInt(&ok);
+    if (ok)
+      type = CQBaseModelType(itype);
+  }
 
-  bool ok;
-  type = (CQBaseModelType) tvar.toInt(&ok);
-  if (! ok) return false;
+  itype = int(type);
 
   //---
 
   // draw mapped real
   if (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER) {
     if (isHeatmap()) {
+      if (isMouseOver_)
+        return false;
+
       if (! drawRealInRange(painter, option, index))
         return false;
     }
