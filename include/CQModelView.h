@@ -53,11 +53,16 @@ class CQModelView : public QAbstractItemView {
   Q_OBJECT
 
   // new
-  Q_PROPERTY(bool freezeFirstColumn    READ isFreezeFirstColumn   WRITE setFreezeFirstColumn  )
-  Q_PROPERTY(bool stretchLastColumn    READ isStretchLastColumn   WRITE setStretchLastColumn  )
-  Q_PROPERTY(bool multiHeaderLines     READ isMultiHeaderLines    WRITE setMultiHeaderLines   )
-  Q_PROPERTY(bool showVerticalHeader   READ isShowVerticalHeader  WRITE setShowVerticalHeader )
-  Q_PROPERTY(bool showFilter           READ isShowFilter          WRITE setShowFilter         )
+  Q_PROPERTY(bool freezeFirstColumn READ isFreezeFirstColumn WRITE setFreezeFirstColumn)
+  Q_PROPERTY(bool stretchLastColumn READ isStretchLastColumn WRITE setStretchLastColumn)
+  Q_PROPERTY(bool multiHeaderLines  READ isMultiHeaderLines  WRITE setMultiHeaderLines )
+  Q_PROPERTY(bool showFilter        READ isShowFilter        WRITE setShowFilter       )
+
+  Q_PROPERTY(bool         showVerticalHeader READ isShowVerticalHeader WRITE setShowVerticalHeader)
+  Q_PROPERTY(VerticalType verticalType       READ verticalType         WRITE setVerticalType      )
+
+  Q_PROPERTY(bool headerOnBottom READ isHeaderOnBottom WRITE setHeaderOnBottom)
+  Q_PROPERTY(bool headerOnRight  READ isHeaderOnRight  WRITE setHeaderOnRight )
 
   // qtableview+qtreeview
   Q_PROPERTY(bool sortingEnabled       READ isSortingEnabled      WRITE setSortingEnabled     )
@@ -80,6 +85,19 @@ class CQModelView : public QAbstractItemView {
 //Q_PROPERTY(bool animated             READ isAnimated           WRITE setAnimated            )
 //Q_PROPERTY(bool allColumnsShowFocus  READ allColumnsShowFocus  WRITE setAllColumnsShowFocus )
   Q_PROPERTY(bool expandsOnDoubleClick READ expandsOnDoubleClick WRITE setExpandsOnDoubleClick)
+
+  Q_PROPERTY(QColor headerBg    READ headerBg    WRITE setHeaderBg   )
+  Q_PROPERTY(QColor selectionBg READ selectionBg WRITE setSelectionBg)
+  Q_PROPERTY(QColor selectionFg READ selectionFg WRITE setSelectionFg)
+
+  Q_ENUMS(VerticalType)
+
+ public:
+  enum class VerticalType {
+    TEXT,
+    NUMBER,
+    EMPTY
+  };
 
  public:
   CQModelView(QWidget *parent=nullptr);
@@ -179,11 +197,22 @@ class CQModelView : public QAbstractItemView {
   bool isMultiHeaderLines() const { return multiHeaderLines_; }
   void setMultiHeaderLines(bool b);
 
+  bool isShowFilter() const { return showFilter_; }
+  void setShowFilter(bool b);
+
   bool isShowVerticalHeader() const { return showVerticalHeader_; }
   void setShowVerticalHeader(bool b);
 
-  bool isShowFilter() const { return showFilter_; }
-  void setShowFilter(bool b);
+  VerticalType verticalType() const { return verticalType_; }
+  void setVerticalType(VerticalType type);
+
+  //---
+
+  bool isHeaderOnBottom() const { return headerOnBottom_; }
+  void setHeaderOnBottom(bool b);
+
+  bool isHeaderOnRight() const { return headerOnRight_; }
+  void setHeaderOnRight(bool b);
 
   //---
 
@@ -215,6 +244,17 @@ class CQModelView : public QAbstractItemView {
 
   bool expandsOnDoubleClick() const { return expandsOnDoubleClick_; }
   void setExpandsOnDoubleClick(bool b) { expandsOnDoubleClick_ = b; }
+
+  //---
+
+  const QColor &headerBg() const { return headerBg_; }
+  void setHeaderBg(const QColor &c) { headerBg_ = c; update(); }
+
+  const QColor &selectionBg() const { return selectionBg_; }
+  void setSelectionBg(const QColor &v) { selectionBg_ = v; }
+
+  const QColor &selectionFg() const { return selectionFg_; }
+  void setSelectionFg(const QColor &v) { selectionFg_ = v; }
 
   //---
 
@@ -518,10 +558,16 @@ class CQModelView : public QAbstractItemView {
 
   void selectionBehaviorSlot(QAction *action);
 
+  void setHeaderOnBottomSlot(bool b);
+  void setHeaderOnRightSlot(bool b);
+
   void setRootSlot();
   void resetRootSlot();
 
   void showVerticalHeaderSlot(bool b);
+  void showVerticalTextSlot(bool b);
+  void showVerticalNumberSlot(bool b);
+  void showVerticalEmptySlot(bool b);
 
   void showFilterSlot(bool b);
   void filterByValueSlot();
@@ -555,6 +601,7 @@ class CQModelView : public QAbstractItemView {
     int height       { 10 };
     int margin       { 6 };
     int headerMargin { 8 };
+    int vheaderWidth { -1 };
   };
 
   struct RowData {
@@ -660,6 +707,8 @@ class CQModelView : public QAbstractItemView {
 
     void reset() {
       resetRole();
+
+      roleColors.clear();
     }
 
     void resetRole() {
@@ -694,13 +743,18 @@ class CQModelView : public QAbstractItemView {
   SelModelP sm_;
   DelegateP delegate_;
 
-  bool freezeFirstColumn_  { false };
-  bool stretchLastColumn_  { false };
-  bool multiHeaderLines_   { false };
-  bool showVerticalHeader_ { true };
-  bool showFilter_         { false };
+  bool freezeFirstColumn_ { false };
+  bool stretchLastColumn_ { false };
+  bool multiHeaderLines_  { false };
+  bool showFilter_        { false };
 
-  bool sortingEnabled_     { false };
+  bool         showVerticalHeader_ { true };
+  VerticalType verticalType_       { VerticalType::TEXT };
+
+  bool headerOnBottom_ { false };
+  bool headerOnRight_  { false };
+
+  bool sortingEnabled_ { false };
 
   bool         showGrid_         { false };
   bool         showHHeaderLines_ { true };
@@ -710,6 +764,10 @@ class CQModelView : public QAbstractItemView {
   int  indentation_          { 20 };
   bool rootIsDecorated_      { true };
   bool expandsOnDoubleClick_ { true };
+
+  QColor headerBg_    { "#DDDDEE" };
+  QColor selectionBg_ { "#7F7F7F" };
+  QColor selectionFg_ { "#000000" };
 
   CQModelViewCornerButton *cornerWidget_ { nullptr };
 

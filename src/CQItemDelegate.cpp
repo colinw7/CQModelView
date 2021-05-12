@@ -34,7 +34,7 @@ paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &
     QItemDelegate::paint(painter, option, index);
 
     if (isEditable_ && isMouseOver_) {
-      CQBaseModelType type = (CQBaseModelType) itype;
+      auto type = (CQBaseModelType) itype;
 
       bool numeric = (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER);
 
@@ -48,7 +48,7 @@ CQItemDelegate::
 drawType(QPainter *painter, const QStyleOptionViewItem &option,
          const QModelIndex &index, int &itype) const
 {
-  QAbstractItemModel *model = view_->model();
+  auto *model = view_->model();
   if (! model) return false;
 
   //---
@@ -57,7 +57,7 @@ drawType(QPainter *painter, const QStyleOptionViewItem &option,
   // TODO: validate cast
   auto type = CQBaseModelType::STRING;
 
-  QVariant tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Type);
+  auto tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Type);
 
   if (! tvar.isValid())
     tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::BaseType);
@@ -101,10 +101,10 @@ CQItemDelegate::
 drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
                 const QModelIndex &index) const
 {
-  QStyleOptionViewItem option1 = option;
+  auto option1 = option;
 
   auto initSelected = [&]() {
-    QColor c = option.palette.color(QPalette::Highlight);
+    auto c = option.palette.color(QPalette::Highlight);
 
     option1.palette.setColor(QPalette::Highlight, QColor(0,0,0,0));
     option1.palette.setColor(QPalette::HighlightedText, c);
@@ -139,14 +139,14 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   //---
 
   // get min/max for column
-  QAbstractItemModel *model = view_->model();
+  auto *model = view_->model();
 
-  QVariant minVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Min);
+  auto minVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Min);
 
   if (! minVar.isValid())
     minVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::DataMin);
 
-  QVariant maxVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Max);
+  auto maxVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Max);
 
   if (! maxVar.isValid())
     maxVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::DataMax);
@@ -165,7 +165,7 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   //---
 
   // get model value
-  QVariant var = model->data(index, Qt::EditRole);
+  auto var = model->data(index, Qt::EditRole);
 
   if (! var.isValid())
     var = model->data(index, Qt::DisplayRole);
@@ -181,9 +181,9 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
 
   QColor bg1(255, 0, 0);
 
-  QColor bg2 = option.palette.color(QPalette::Window);
+  auto bg2 = option.palette.color(QPalette::Window);
 
-  QColor bg = blendColors(bg1, bg2, norm);
+  auto bg = blendColors(bg1, bg2, norm);
 
   //---
 
@@ -195,7 +195,7 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   else {
     int g = qGray(bg.red(), bg.green(), bg.blue());
 
-    QColor tc = (g < 127 ? Qt::white : Qt::black);
+    auto tc = (g < 127 ? Qt::white : Qt::black);
 
     option1.palette.setColor(QPalette::Text, tc);
   }
@@ -214,7 +214,7 @@ void
 CQItemDelegate::
 drawEditImage(QPainter *painter, const QRect &rect, bool numeric) const
 {
-  QImage image = s_EDIT_ITEM_SVG.image(32, 32);
+  auto image = s_EDIT_ITEM_SVG.image(32, 32);
 
   int dy = (rect.height() - image.height())/2;
 
@@ -232,12 +232,12 @@ bool
 CQItemDelegate::
 isNumericColumn(int column) const
 {
-  QAbstractItemModel *model = view_->model();
+  auto *model = view_->model();
   if (! model) return false;
 
-  CQBaseModelType type = CQBaseModelType::STRING;
+  auto type = CQBaseModelType::STRING;
 
-  QVariant tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::Type);
+  auto tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::Type);
 
   if (! tvar.isValid())
     tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::BaseType);
@@ -272,7 +272,7 @@ createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &i
   if (w->layout())
     w->layout()->invalidate();
 
-  CQItemDelegate *th = const_cast<CQItemDelegate *>(this);
+  auto *th = const_cast<CQItemDelegate *>(this);
 
   w->installEventFilter(th);
 

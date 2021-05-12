@@ -8,3 +8,4 @@
 . Escape close editor
 + corner button and icon
 + model view debug/speed/drag select
++ bad draw after expand/collapse
