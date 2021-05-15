@@ -21,7 +21,6 @@ HEADERS += \
 ../include/CQModelView.h \
 ../include/CQModelViewHeader.h \
 ../include/CQItemDelegate.h \
-../include/CQBaseModelTypes.h \
 
 OBJECTS_DIR = ../obj
 
@@ -30,3 +29,4 @@ DESTDIR = ../lib
 INCLUDEPATH += \
 . \
 ../include \
+../../CQBaseModel/include \
