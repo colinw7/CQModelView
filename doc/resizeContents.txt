@@ -1,0 +1,8 @@
+QHeaderView::resizeContentsPrecision # max rows to process
+ 0=visible, -1=all, default 1000
+
+start/end at firstVisibleItem/lastVisibleItem when visible
+
+delegateForIndex sizeHint
+ . Qt::SizeHintRole if set
+ . otherwise sum of Qt::DecorationRole, Qt::DisplayRole, Qt::CheckStateRole

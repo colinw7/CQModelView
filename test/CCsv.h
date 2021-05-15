@@ -11,9 +11,9 @@
  */
 class CCsv {
  public:
-  typedef std::vector<int>         Inds;
-  typedef std::vector<std::string> Fields;
-  typedef std::vector<Fields>      Data;
+  using Inds   = std::vector<int>;
+  using Fields = std::vector<std::string>;
+  using Data   = std::vector<Fields>;
 
   enum CommentType {
     NONE,
@@ -22,31 +22,43 @@ class CCsv {
   };
 
  public:
-  CCsv(const std::string &filename) :
+  explicit CCsv(const std::string &filename="") :
    filename_(filename) {
   }
 
+  //! get/set filename
   const std::string &filename() const { return filename_; }
+  void setFilename(const std::string &filename) { filename_ = filename; }
 
+  //! get header fields
   const Fields &header() const { assert(loaded_); return header_; }
 
+  //! get row data
   const Data &data() const { assert(loaded_); return data_; }
 
+  //! get meta data
   bool hasMeta() const { return ! meta_.empty(); }
-
   const Data &meta() const { assert(loaded_); return meta_; }
 
+  //---
+
+  //! get/set has comment header
   bool isCommentHeader() const { return commentHeader_; }
   void setCommentHeader(bool b) { commentHeader_ = b; }
 
+  //! get/set first line is header
   bool isFirstLineHeader() const { return firstLineHeader_; }
   void setFirstLineHeader(bool b) { firstLineHeader_ = b; }
 
+  //! get/set allow comment lines
   bool isAllowComments() const { return allowComments_; }
   void setAllowComments(bool b) { allowComments_ = b; }
 
+  //! get/set separator (default comma)
   const char &separator() const { return separator_; }
   void setSeparator(const char &c) { separator_ = c; }
+
+  //---
 
   bool load() {
     if (loaded_)
@@ -92,7 +104,7 @@ class CCsv {
 
           // TODO: skip first line
 
-          meta_.push_back(strs);
+          meta_.push_back(std::move(strs));
 
           continue;
         }
@@ -103,7 +115,7 @@ class CCsv {
             if (! stringToFields(comment, strs))
               continue;
 
-            header_ = strs;
+            header_ = std::move(strs);
 
             commentHeader   = false;
             firstLineHeader = false;
@@ -127,7 +139,7 @@ class CCsv {
       //---
 
       if (firstLineHeader) {
-        header_ = strs;
+        header_ = std::move(strs);
 
         commentHeader   = false;
         firstLineHeader = false;
@@ -137,7 +149,7 @@ class CCsv {
 
       //---
 
-      data_.push_back(strs);
+      data_.push_back(std::move(strs));
     }
 
     close();
@@ -168,7 +180,7 @@ class CCsv {
         fields1 = fields;
       }
 
-      data.push_back(fields1);
+      data.push_back(std::move(fields1));
     }
 
     return true;
@@ -183,6 +195,10 @@ class CCsv {
     return true;
   }
 
+  bool stringToColumns(const std::string &str, Fields &strs) {
+    return stringToSubFields(str, strs);
+  }
+
  private:
   bool open() const {
     fp_ = fopen(filename_.c_str(), "r");
@@ -195,9 +211,10 @@ class CCsv {
     if (fp_)
       fclose(fp_);
 
-    fp_ = 0;
+    fp_ = nullptr;
   }
 
+  // get is command and check for meta start/end
   bool isComment(const std::string &line, std::string &comment, CommentType &type) {
     int i = 0;
 
@@ -220,6 +237,7 @@ class CCsv {
     return true;
   }
 
+  // read line from file
   bool readLine(std::string &line) {
     line = "";
 
@@ -239,26 +257,16 @@ class CCsv {
     return true;
   }
 
+  // convert string to separated fields
   bool stringToFields(std::string &line, Fields &strs) {
     std::vector<Fields> strsArray;
 
-    // keep reading lines until propertly terminated
-    bool terminated = true;
+    Fields strs1;
 
-    while (true) {
-      Fields strs1;
+    if (! stringToSubFields(line, strs1))
+      return false;
 
-      if (! stringToSubFields(line, strs1, terminated))
-        return false;
-
-      strsArray.push_back(strs1);
-
-      if (terminated)
-        break;
-
-      if (! readLine(line))
-        break;
-    }
+    strsArray.push_back(std::move(strs1));
 
     //---
 
@@ -270,22 +278,25 @@ class CCsv {
     //---
 
     for (int i = 0; i < na; ++i) {
-      const Fields &strs1 = strsArray[i];
+      const Fields &strs2 = strsArray[i];
 
       if (i > 0) {
         std::string ls = strs.back() + '\n';
 
         strs.pop_back();
 
-        int ns1 = strs1.size();
+        int ns1 = strs2.size();
 
-        strs.push_back(ls + strs1[0]);
+        if (ns1 > 0)
+          strs.push_back(ls + strs2[0]);
+        else
+          strs.push_back(std::move(ls));
 
         for (int j = 1; j < ns1; ++j)
-          strs.push_back(strs1[j]);
+          strs.push_back(strs2[j]);
       }
       else {
-        for (const auto &s : strs1)
+        for (const auto &s : strs2)
           strs.push_back(s);
       }
     }
@@ -293,7 +304,8 @@ class CCsv {
     return true;
   }
 
-  bool stringToSubFields(const std::string &str, Fields &strs, bool &terminated) {
+  // convert string to separated fields
+  bool stringToSubFields(const std::string &str, Fields &strs) {
     static char dquote = '\"';
 
     str_ = str;
@@ -304,16 +316,16 @@ class CCsv {
       std::string str1;
 
       while (pos_ < len_ && str_[pos_] != separator_) {
-        if (! terminated || str_[pos_] == dquote) {
-          if (terminated)
-            ++pos_;
+        if (str_[pos_] == dquote) {
+          // skip double quote
+          ++pos_;
 
-          // skip string (might not be terminated)
+          // skip string
           std::string pstr;
 
-          terminated = parseString(pstr);
+          parseString(pstr);
 
-          str1 += pstr;
+          str1 += std::move(pstr);
         }
         else {
           // skip to field separator
@@ -333,38 +345,49 @@ class CCsv {
         ++pos_;
 
       // add to return list
-      strs.push_back(str1);
+      strs.push_back(std::move(str1));
     }
 
     return true;
   }
 
-  bool parseString(std::string &str) {
+  // parse string (will read extra lines)
+  void parseString(std::string &str) {
     static char dquote = '\"';
 
     bool terminated = false;
 
-    while (pos_ < len_) {
-      if (str_[pos_] == dquote) {
-        ++pos_;
-
-        if (pos_ < len_ && str_[pos_] == dquote) {
-          str += dquote;
-
+    while (! terminated) {
+      while (pos_ < len_) {
+        if (str_[pos_] == dquote) {
           ++pos_;
-        }
-        else {
-          terminated = true;
-          break;
-        }
-      }
-      else
-        str += str_[pos_++];
-    }
 
-    return terminated;
+          if (pos_ < len_ && str_[pos_] == dquote) {
+            str += dquote;
+
+            ++pos_;
+          }
+          else {
+            terminated = true;
+            break;
+          }
+        }
+        else
+          str += str_[pos_++];
+      }
+
+      if (! terminated) {
+        if (readLine(str_)) {
+          len_ = str_.size();
+          pos_ = 0;
+        }
+        else
+          terminated = true;
+      }
+    }
   }
 
+  // skip spaces
   void skipSpace(const std::string &str, int &i) {
     int len = str.size();
 

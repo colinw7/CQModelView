@@ -9,3 +9,4 @@
 + corner button and icon
 + model view debug/speed/drag select
 + bad draw after expand/collapse
++ cache column size ? smart auto resize to contents

@@ -1,12 +1,31 @@
 #include <CQCsvModel.h>
 #include <CCsv.h>
 
+#include <CQModelUtil.h>
+
+#include <QColor>
+#include <QBuffer>
+#include <QDataStream>
 #include <iostream>
+
+namespace {
+
+QDataStream::Version dataStreamVersion() {
+#if QT_VERSION >= 0x050000
+  return QDataStream::Qt_5_0;
+#else
+  return QDataStream::Qt_4_0;
+#endif
+}
+
+}
 
 CQCsvModel::
 CQCsvModel()
 {
   setObjectName("csvModel");
+
+  setDataType(CQBaseModelDataType::CSV);
 
   // default read only
   setReadOnly(true);
@@ -35,6 +54,12 @@ load(const QString &filename)
   // get header data and rows from csv
   const CCsv::Fields &header = csv.header();
   const CCsv::Data   &data   = csv.data();
+
+  //---
+
+  hheader_.clear();
+  vheader_.clear();
+  data_   .clear();
 
   //---
 
@@ -127,81 +152,8 @@ load(const QString &filename)
   //---
 
   // if columns specified filter and reorder data by columns
-  if (columns_.length()) {
-    Data  data    = data_;
-    Cells hheader = hheader_;
-
-    std::map<int,int> columnMap;
-
-    int nc1 = hheader_.size();
-    int nc2 = columns_.length();
-
-    for (int c = 0; c < nc1; ++c)
-      columnMap[c] = -1;
-
-    for (int c = 0; c < nc2; ++c) {
-      const QString &name = columns_[c];
-
-      // get index for matching column name
-      int ind = -1;
-
-      for (int c1 = 0; c1 < nc1; ++c1) {
-        if (hheader[c1] == name) {
-          ind = c1;
-          break;
-        }
-      }
-
-      // if name not found, try and convert column name to number
-      if (ind == -1) {
-        bool ok;
-
-        int ind1 = name.toInt(&ok);
-
-        if (ok && ind1 >= 0 && ind1 < nc1)
-          ind = ind1;
-      }
-
-      if (ind == -1) {
-        std::cerr << "Invalid column name '" << name.toStdString() << "'\n";
-        continue;
-      }
-
-      columnMap[ind] = c;
-    }
-
-    // get new number of columns
-    nc2 = 0;
-
-    for (int c = 0; c < nc1; ++c) {
-      int c1 = columnMap[c];
-
-      if (c1 >= 0 && c1 < nc1)
-        ++nc2;
-    }
-
-    // remap horizontal header and row data
-    hheader_.clear(); hheader_.resize(nc2);
-
-    int nr = data.size();
-
-    for (int r = 0; r < nr; ++r) {
-      Cells &cells1 = data [r]; // old data
-      Cells &cells2 = data_[r]; // new data
-
-      cells2.clear(); cells2.resize(nc2);
-
-      for (int c = 0; c < nc1; ++c) {
-        int c1 = columnMap[c];
-
-        if (c1 < 0 || c1 >= nc1)
-          continue;
-
-        hheader_[c1] = hheader[c];
-        cells2  [c1] = cells1 [c];
-      }
-    }
-  }
+  if (columns_.length())
+    applyFilterColumns(columns_);
 
   //---
 
@@ -288,10 +240,112 @@ load(const QString &filename)
             setColumnMax(icolumn, max);
           }
         }
+        else if (type == "title") {
+          setColumnTitle(icolumn, value.c_str());
+        }
         else {
-          std::cerr << "Invalid column type '" << type << "'\n";
+          setColumnNameValue(icolumn, type.c_str(), value.c_str());
+        }
+      }
+      // handle cell data:
+      //   cell <cell_index> <role> <value>
+      else if (fields[0] == "cell") {
+        QString indStr, roleStr, value;
+
+        if (numFields == 4) {
+          indStr  = fields[1].c_str();
+          roleStr = fields[2].c_str();
+          value   = fields[3].c_str();
+        }
+        else {
+          std::cerr << "Invalid cell data\n";
           continue;
         }
+
+        int role = CQModelUtil::nameToRole(roleStr);
+
+        if (role < 0) {
+          std::cerr << "Invalid role '" << fields[2] << "'\n";
+          continue;
+        }
+
+        int row = -1, col = -1;
+
+        auto indStrs = indStr.split(":");
+
+        if (indStrs.length() == 2) {
+          bool ok;
+          row = indStrs[0].toInt(&ok); if (! ok) row = -1;
+          col = indStrs[1].toInt(&ok); if (! ok) col = -1;
+        }
+
+        if (row < 0 || col < 0) {
+          std::cerr << "Invalid index '" << fields[1] << "'\n";
+          continue;
+        }
+
+        auto valueStrs = value.split(":");
+
+        QVariant var;
+
+        if (valueStrs.length() == 2) {
+          int type = QMetaType::type(valueStrs[0].toLatin1().constData());
+
+          if (type < 0) {
+            std::cerr << "Invalid type '" << valueStrs[0].toStdString() << "'\n";
+            continue;
+          }
+
+          if (type == QMetaType::QColor) {
+            var = QColor(valueStrs[1]);
+          }
+          else {
+            QByteArray ba;
+
+            // write current string to buffer
+            QBuffer obuffer(&ba);
+            obuffer.open(QIODevice::WriteOnly);
+
+            QDataStream out(&obuffer);
+            out.setVersion(dataStreamVersion());
+
+            out << valueStrs[1];
+
+            // create user type data from data stream using registered DataStream methods
+            QBuffer ibuffer(&ba);
+            ibuffer.open(QIODevice::ReadOnly);
+
+            QDataStream in(&ibuffer);
+            in.setVersion(dataStreamVersion());
+
+            var = QVariant(type, 0);
+
+            // const cast is safe since we operate on a newly constructed variant
+            if (! QMetaType::load(in, type, const_cast<void *>(var.constData()))) {
+              std::cerr << "Invalid data '" << valueStrs[1].toStdString() <<
+                           "' for type '" << valueStrs[0].toStdString() << "'\n";
+              continue;
+            }
+          }
+        }
+        else {
+          var = valueStrs[1];
+        }
+
+        if (row < 0 || col < 0) {
+          std::cerr << "Invalid index '" << fields[1] << "'\n";
+          continue;
+        }
+
+        bool readOnly = isReadOnly();
+
+        if (readOnly)
+          setReadOnly(false);
+
+        setData(index(row, col, QModelIndex()), var, role);
+
+        if (readOnly)
+          setReadOnly(readOnly);
       }
       // handle global data
       //   global <> <name> <value>
@@ -379,7 +433,7 @@ save(QAbstractItemModel *model, std::ostream &os)
       QVariant var = model->headerData(c, Qt::Horizontal);
 
       if (output)
-        os << ",";
+        os << separator().toLatin1();
 
       os << encodeVariant(var, separator());
 
@@ -389,7 +443,7 @@ save(QAbstractItemModel *model, std::ostream &os)
     os << "\n";
   }
 
-  //--
+  //---
 
   // output rows
   for (int r = 0; r < nr; ++r) {
@@ -412,7 +466,7 @@ save(QAbstractItemModel *model, std::ostream &os)
       QVariant var = model->data(ind);
 
       if (output)
-        os << ",";
+        os << separator().toLatin1();
 
       os << encodeVariant(var, separator());
 

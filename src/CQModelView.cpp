@@ -2432,7 +2432,7 @@ drawVHeader(QPainter *painter) const
 
     //---
 
-    if (! rowData.parent.isValid() && globalRowData_.vheaderWidth > 0) {
+    if (! isHierarchical() && globalRowData_.vheaderWidth > 0) {
       int m = globalRowData_.margin;
 
       if      (verticalType() == VerticalType::TEXT) {
@@ -2901,7 +2901,7 @@ initRowDatas(const QModelIndex &parent, int &nvr, int depth, int parentFlatRow)
     ++nvr;
 
     if (children && expanded) {
-      if (model_->canFetchMore(parent))
+      if (model_ && model_->canFetchMore(parent))
         model_->fetchMore(parent);
 
       initRowDatas(ind1, nvr, depth + 1, parentFlatRow1);
@@ -4101,7 +4101,7 @@ expand(const QModelIndex &index)
 
   expanded_.insert(index);
 
-  if (model_->canFetchMore(index))
+  if (model_ && model_->canFetchMore(index))
     model_->fetchMore(index);
 
   //---
@@ -4146,6 +4146,10 @@ bool
 CQModelView::
 isExpanded(const QModelIndex &index) const
 {
+  if (! model_) return false;
+
+  assert(index.model() == model());
+
   return isIndexExpanded(index);
 }
 
@@ -4153,8 +4157,16 @@ void
 CQModelView::
 setExpanded(const QModelIndex &index, bool expanded)
 {
-  if (expanded)
+  if (! model_) return;
+
+  assert(index.model() == model());
+
+  if (expanded) {
+    if (index.parent().isValid() && ! isExpanded(index.parent()))
+      expand(index.parent());
+
     expand(index);
+  }
   else
     collapse(index);
 }
@@ -4382,6 +4394,8 @@ resizeColumnToContents(int column)
 
   //---
 
+  // TODO: SizeHintRole
+
   auto data = model_->headerData(column, Qt::Horizontal, Qt::DisplayRole);
 
   auto str = data.toString();
@@ -4447,7 +4461,7 @@ CQModelView::
 maxColumnWidth(int column, const QModelIndex &parent, int depth,
                int &nvr, int &maxWidth, int maxRows)
 {
-  if (model_->canFetchMore(parent))
+  if (model_ && model_->canFetchMore(parent))
     model_->fetchMore(parent);
 
   int nr = model_->rowCount(parent);
@@ -4455,6 +4469,8 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
   for (int r = 0; r < nr; ++r) {
     if (isRowHidden(r, parent))
       continue;
+
+    // TODO: SizeHintRole and delegate sizeHint
 
     auto ind = model_->index(r, column, parent);
 
