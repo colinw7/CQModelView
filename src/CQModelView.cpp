@@ -1459,7 +1459,7 @@ paintEvent(QPaintEvent *e)
 
   //---
 
-  if (showGrid())
+  if (isShowGrid())
     initDrawGrid();
 
   //---
@@ -1472,7 +1472,7 @@ paintEvent(QPaintEvent *e)
 
   //---
 
-  if (showGrid())
+  if (isShowGrid())
     drawGrid(&painter);
 }
 
@@ -2435,6 +2435,10 @@ drawVHeader(QPainter *painter) const
     if (! isHierarchical() && globalRowData_.vheaderWidth > 0) {
       int m = globalRowData_.margin;
 
+      int dy = (option.rect.height() - paintData_.fm.height() + 1)/2;
+
+      dy += paintData_.fm.ascent();
+
       if      (verticalType() == VerticalType::TEXT) {
         auto data = model_->headerData(rowData.row, Qt::Vertical, Qt::DisplayRole);
 
@@ -2444,7 +2448,7 @@ drawVHeader(QPainter *painter) const
           if (text.length()) {
             setRolePen(painter, ColorRole::HeaderFg);
 
-            painter->drawText(option.rect.topLeft() + QPoint(m, paintData_.fm.ascent() + m), text);
+            painter->drawText(option.rect.topLeft() + QPoint(m, dy), text);
           }
         }
       }
@@ -2455,7 +2459,7 @@ drawVHeader(QPainter *painter) const
 
         int dx = globalRowData_.vheaderWidth - 2*m - paintData_.fm.width(text);
 
-        painter->drawText(option.rect.topLeft() + QPoint(m + dx, paintData_.fm.ascent() + m), text);
+        painter->drawText(option.rect.topLeft() + QPoint(m + dx, dy), text);
       }
     }
   }
@@ -2651,6 +2655,13 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
   //---
 
   auto fillBackground = [&]() {
+    auto bgVar = model_->data(ind, Qt::BackgroundRole);
+
+    if (bgVar.canConvert<QBrush>())
+      painter->setBrush(qvariant_cast<QBrush>(bgVar).color());
+
+    //---
+
     if (option.state & QStyle::State_MouseOver) {
       setRolePen  (painter, ColorRole::MouseOverFg);
       setRoleBrush(painter, ColorRole::MouseOverBg);
@@ -2688,6 +2699,11 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
     painter->save();
 
+    auto fgVar = model_->data(ind, Qt::ForegroundRole);
+
+    if (fgVar.canConvert<QBrush>())
+      painter->setPen(qvariant_cast<QBrush>(fgVar).color());
+
     painter->setClipRect(textRect);
 
 #if 1
@@ -2703,6 +2719,10 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
     int nl = textLayout.lineCount();
 
+    int dy = (option.rect.height() - paintData_.fm.height() + 1)/2;
+
+    dy += paintData_.fm.ascent();
+
     for (int i = 0; i < nl; ++i) {
       auto line = textLayout.lineAt(i);
 
@@ -2711,7 +2731,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
       auto text = textLayout.text().mid(start, length);
 
-      painter->drawText(textRect.topLeft() + QPoint(0, paintData_.fm.ascent()), text);
+      painter->drawText(textRect.topLeft() + QPoint(0, dy), text);
 
       //line.draw(painter, textRect.topLeft());
 
@@ -3491,7 +3511,7 @@ mouseDoubleClickEvent(QMouseEvent *e)
   handleMouseRelease();
 
   if      (mouseData_.pressData.ind.isValid()) {
-    auto persistent = mouseData_.pressData.ind;
+    auto persistent = QPersistentModelIndex(mouseData_.pressData.ind);
 
     if (edit(persistent, DoubleClicked, e))
       return;
@@ -3515,6 +3535,22 @@ CQModelView::
 handleMouseDoubleClick()
 {
   if      (mouseData_.pressData.hsection >= 0) {
+    if (headerEditor_) {
+      headerEditor_->deleteLater();
+
+      headerEditor_ = nullptr;
+    }
+
+    headerEditor_ = new CQModelViewHeaderEdit(this, mouseData_.pressData.hsection);
+
+    headerEditor_->setGeometry(mouseData_.pressData.rect);
+
+    auto text = model_->headerData(mouseData_.pressData.hsection, Qt::Horizontal, Qt::DisplayRole);
+
+    headerEditor_->setText(text.toString());
+    headerEditor_->setFocus();
+
+    headerEditor_->show();
   }
   else if (mouseData_.pressData.hsectionh >= 0) {
     resizeColumnToContents(mouseData_.pressData.hsectionh);
@@ -3688,6 +3724,9 @@ addMenuActions(QMenu *menu)
     addCheckedAction(optionMenu, "Root Is Decorated", rootIsDecorated(),
                      SLOT(rootIsDecoratedSlot(bool)));
 
+  addCheckedAction(optionMenu, "Grid", isShowGrid(),
+                   SLOT(showGridSlot(bool)));
+
   //---
 
   auto *horizontalMenu = addMenu("Horizontal Header");
@@ -3714,21 +3753,20 @@ addMenuActions(QMenu *menu)
 
   auto *sortMenu = addMenu("Sort");
 
+  addCheckedAction(sortMenu, "Enabled", isSortingEnabled(),
+                   SLOT(sortingEnabledSlot(bool)));
+
   if (column >= 0) {
     bool isCurrent = (isSortingEnabled() && column == hh_->sortIndicatorSection());
 
-     bool isAscending  = (isCurrent && hh_->sortIndicatorOrder() == Qt::AscendingOrder );
-     bool isDescending = (isCurrent && hh_->sortIndicatorOrder() == Qt::DescendingOrder);
+    bool isAscending  = (isCurrent && hh_->sortIndicatorOrder() == Qt::AscendingOrder );
+    bool isDescending = (isCurrent && hh_->sortIndicatorOrder() == Qt::DescendingOrder);
 
-     addCheckedAction(sortMenu, "Increasing", isAscending, SLOT(sortIncreasingSlot()))->
-       setIcon(QIcon(QPixmap::fromImage(SORT_AZ_SVG().image(is, is))));
+    addCheckedAction(sortMenu, "Increasing", isAscending, SLOT(sortIncreasingSlot()))->
+      setIcon(QIcon(QPixmap::fromImage(SORT_AZ_SVG().image(is, is))));
 
-     addCheckedAction(sortMenu, "Decreasing", isDescending, SLOT(sortDecreasingSlot()))->
-       setIcon(QIcon(QPixmap::fromImage(SORT_ZA_SVG().image(is, is))));
-  }
-  else {
-    addCheckedAction(sortMenu, "Enabled", isSortingEnabled(),
-                     SLOT(sortingEnabledSlot(bool)));
+    addCheckedAction(sortMenu, "Decreasing", isDescending, SLOT(sortDecreasingSlot()))->
+      setIcon(QIcon(QPixmap::fromImage(SORT_ZA_SVG().image(is, is))));
   }
 
   //---
@@ -3888,6 +3926,13 @@ CQModelView::
 rootIsDecoratedSlot(bool b)
 {
   setRootIsDecorated(b);
+}
+
+void
+CQModelView::
+showGridSlot(bool b)
+{
+  setShowGrid(b);
 }
 
 void
@@ -5161,4 +5206,53 @@ CQModelViewFilterEdit::
 CQModelViewFilterEdit(CQModelView *view, int column) :
  QLineEdit(view), view_(view), column_(column)
 {
+  setObjectName("filterEdit");
+}
+
+//------
+
+CQModelViewHeaderEdit::
+CQModelViewHeaderEdit(CQModelView *view, int column) :
+ QLineEdit(view->horizontalHeader()), view_(view), column_(column)
+{
+  setObjectName("headerEdit");
+
+  setFrame(false);
+
+  connect(this, SIGNAL(returnPressed()), this, SLOT(acceptSlot()));
+}
+
+void
+CQModelViewHeaderEdit::
+focusInEvent(QFocusEvent *)
+{
+  selectAll();
+}
+
+void
+CQModelViewHeaderEdit::
+focusOutEvent(QFocusEvent *)
+{
+  hide();
+}
+
+void
+CQModelViewHeaderEdit::
+keyPressEvent(QKeyEvent *e)
+{
+  if (e->key() == Qt::Key_Escape)
+    view_->setFocus();
+
+  QLineEdit::keyPressEvent(e);
+}
+
+void
+CQModelViewHeaderEdit::
+acceptSlot()
+{
+  auto *model = view_->model();
+
+  model->setHeaderData(column_, Qt::Horizontal, text(), Qt::DisplayRole);
+
+  view_->setFocus();
 }

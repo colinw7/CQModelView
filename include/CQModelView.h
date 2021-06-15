@@ -14,6 +14,7 @@ class CQModelViewHeader;
 class CQModelViewCornerButton;
 class CQModelViewSelectionModel;
 class CQModelViewFilterEdit;
+class CQModelViewHeaderEdit;
 
 class QAbstractItemModel;
 class QItemSelectionModel;
@@ -69,7 +70,7 @@ class CQModelView : public QAbstractItemView {
 //Q_PROPERTY(bool wordWrap             READ wordWrap              WRITE setWordWrap           )
 
   // qtableview
-  Q_PROPERTY(bool showGrid             READ showGrid              WRITE setShowGrid           )
+  Q_PROPERTY(bool showGrid             READ isShowGrid            WRITE setShowGrid           )
   Q_PROPERTY(bool showHHeaderLines     READ showHHeaderLines      WRITE setShowHHeaderLines   )
   Q_PROPERTY(bool showVHeaderLines     READ showVHeaderLines      WRITE setShowVHeaderLines   )
   Q_PROPERTY(bool cornerButtonEnabled  READ isCornerButtonEnabled WRITE setCornerButtonEnabled)
@@ -219,7 +220,7 @@ class CQModelView : public QAbstractItemView {
   bool isSortingEnabled() const { return sortingEnabled_; }
   void setSortingEnabled(bool b);
 
-  bool showGrid() const { return showGrid_; }
+  bool isShowGrid() const { return showGrid_; }
   void setShowGrid(bool b);
 
   bool showHHeaderLines() const { return showHHeaderLines_; }
@@ -551,6 +552,7 @@ class CQModelView : public QAbstractItemView {
   void stretchLastColumnSlot   (bool b);
   void multiHeaderLinesSlot    (bool b);
   void rootIsDecoratedSlot     (bool b);
+  void showGridSlot            (bool b);
 
   void sortingEnabledSlot(bool b);
   void sortIncreasingSlot();
@@ -815,6 +817,8 @@ class CQModelView : public QAbstractItemView {
   bool autoFitOnShow_ { true };
   bool autoFitted_    { false };
 
+  CQModelViewHeaderEdit *headerEditor_ { nullptr };
+
   // draw data
   int   nr_  { 0 };
   int   nc_  { 0 };
@@ -869,6 +873,30 @@ class CQModelViewFilterEdit : public QLineEdit {
 
   int column() const { return column_; }
   void setColumn(int c) { column_ = c; }
+
+ private:
+  CQModelView* view_   { nullptr };
+  int          column_ { -1 };
+};
+
+//---
+
+class CQModelViewHeaderEdit : public QLineEdit {
+  Q_OBJECT
+
+ public:
+  CQModelViewHeaderEdit(CQModelView *view, int column = 1);
+
+  int column() const { return column_; }
+  void setColumn(int c) { column_ = c; }
+
+  void focusInEvent (QFocusEvent *e) override;
+  void focusOutEvent(QFocusEvent *e) override;
+
+  void keyPressEvent(QKeyEvent *e) override;
+
+ private slots:
+  void acceptSlot();
 
  private:
   CQModelView* view_   { nullptr };
