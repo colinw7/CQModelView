@@ -828,6 +828,8 @@ class CQModelView : public QAbstractItemView {
   QRect visualRect_;
   int   visualBorderRows_ { 3 };
   QRect paintRect_;
+
+  int sortRole_ { -1 };
 };
 
 //---

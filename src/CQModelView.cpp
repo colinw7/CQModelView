@@ -17,6 +17,7 @@
 #include <svg/sort_za_svg.h>
 
 #include <QAbstractItemModel>
+#include <QSortFilterProxyModel>
 #include <QItemSelectionModel>
 #include <QScrollBar>
 #include <QPainter>
@@ -832,8 +833,25 @@ setSortingEnabled(bool b)
 
     hh_->setSortIndicatorShown(sortingEnabled_);
 
-    if (sortingEnabled_)
+    auto *proxyModel = qobject_cast<QSortFilterProxyModel *>(model());
+
+    if (sortingEnabled_) {
+      if (proxyModel) {
+        if (sortRole_ >= 0)
+          proxyModel->setSortRole(sortRole_);
+      }
+
       sortByColumn(hh_->sortIndicatorSection(), hh_->sortIndicatorOrder());
+    }
+    else {
+      if (proxyModel) {
+        sortRole_ = proxyModel->sortRole();
+
+        proxyModel->setSortRole(Qt::InitialSortOrderRole);
+
+        proxyModel->invalidate();
+      }
+    }
 
     redraw();
   }

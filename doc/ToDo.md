@@ -10,3 +10,8 @@
 + model view debug/speed/drag select
 + bad draw after expand/collapse
 + cache column size ? smart auto resize to contents
++ elide text
++ scrollbar tip
++ disable sort
++ extra rows always at bottom (lock ?)
++ extra row/column special render
