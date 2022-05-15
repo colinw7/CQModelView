@@ -647,7 +647,9 @@ columnWidth(int column, const VisColumnData &visColumnData) const
     return visColumnData.rect.width();
   }
   else {
-    const ColumnData &columnData = columnDatas_[column];
+    assert(column >= 0);
+
+    const ColumnData &columnData = columnDatas_[uint(column)];
 
     int cw = (columnData.width > 0 ? columnData.width : 100);
 
@@ -659,7 +661,9 @@ void
 CQModelView::
 setColumnWidth(int column, int width)
 {
-  ColumnData &columnData = columnDatas_[column];
+  assert(column >= 0);
+
+  ColumnData &columnData = columnDatas_[uint(column)];
 
   if (columnData.width != width) {
     columnData.width = width;
@@ -680,7 +684,9 @@ bool
 CQModelView::
 columnHeatmap(int column) const
 {
-  const ColumnData &columnData = columnDatas_[column];
+  assert(column >= 0);
+
+  const ColumnData &columnData = columnDatas_[uint(column)];
 
   return columnData.heatmap;
 }
@@ -689,7 +695,9 @@ void
 CQModelView::
 setColumnHeatmap(int column, bool heatmap)
 {
-  ColumnData &columnData = columnDatas_[column];
+  assert(column >= 0);
+
+  ColumnData &columnData = columnDatas_[uint(column)];
 
   if (columnData.heatmap != heatmap) {
     columnData.heatmap = heatmap;
@@ -1166,7 +1174,7 @@ updateWidgetGeometries()
 
   //---
 
-  int nfe = filterEdits_.size();
+  int nfe = int(filterEdits_.size());
 
   while (nfe > nvc_) {
     delete filterEdits_.back();
@@ -1195,7 +1203,7 @@ updateWidgetGeometries()
     for (const auto &vp : visColumnDatas_) {
       int c = vp.first;
 
-      auto *le = filterEdits_[ic];
+      auto *le = filterEdits_[uint(ic)];
 
       le->setColumn(c);
 
@@ -1216,7 +1224,7 @@ updateWidgetGeometries()
   }
   else {
     for (int c = 0; c < nvc_; ++c) {
-      auto *le = filterEdits_[c];
+      auto *le = filterEdits_[uint(c)];
 
       le->setVisible(false);
     }
@@ -1258,7 +1266,7 @@ updateScrollBars()
 
     ++nvc_;
 
-    const ColumnData &columnData = columnDatas_[c];
+    const ColumnData &columnData = columnDatas_[uint(c)];
 
     int cw = (columnData.width > 0 ? columnData.width : 100);
 
@@ -1454,7 +1462,7 @@ paintEvent(QPaintEvent *e)
   }
 
   if (nc_ != int(columnDatas_.size())) {
-    columnDatas_.resize(nc_);
+    columnDatas_.resize(uint(nc_));
   }
 
   //---
@@ -1706,7 +1714,7 @@ drawCellsSelection(QPainter *painter) const
       }
 
       int getValue(int x, int y) const {
-        const auto *vc = cellAreas[y*nc + x];
+        const auto *vc = cellAreas[uint(y*nc + x)];
 
         return (vc && vc->selected ? 1 : 0);
       }
@@ -1725,7 +1733,7 @@ drawCellsSelection(QPainter *painter) const
         const auto &cellAreas = p1.second;
 
         // vis grid
-        int na = cellAreas.size();
+        auto na = cellAreas.size();
         if (! na) continue;
 
         //---
@@ -1739,7 +1747,7 @@ drawCellsSelection(QPainter *painter) const
         //---
 
         // draw largest rectangle and remove from set until all cells processed
-        int nr = na/nc_;
+        int nr = int(na/size_t(nc_));
 
         CLargestRectData largestRectData(cellAreas, nc_);
 
@@ -1758,8 +1766,8 @@ drawCellsSelection(QPainter *painter) const
           int c1 = lrect.left;
           int c2 = lrect.left + lrect.width - 1;
 
-          const auto *vc1 = cellAreas[r1*nc_ + c1];
-          const auto *vc2 = cellAreas[r2*nc_ + c2];
+          const auto *vc1 = cellAreas[uint(r1*nc_ + c1)];
+          const auto *vc2 = cellAreas[uint(r2*nc_ + c2)];
           assert(vc1 && vc2);
 
           int x1 = vc1->rect.left  ();
@@ -1779,7 +1787,7 @@ drawCellsSelection(QPainter *painter) const
             for (int c = 0; c < lrect.width; ++c) {
               int c1 = lrect.left + c;
 
-              auto *vc = cellAreas[r1*nc_ + c1];
+              auto *vc = cellAreas[uint(r1*nc_ + c1)];
 
               if (vc)
                 vc->selected = false;
@@ -1890,9 +1898,9 @@ updateHierSelection(const QItemSelection &selection)
         CellAreas &cellAreas = selDepthHierCellAreas_[-vc.depth][vc.parentFlatRow];
 
         if (cellAreas.empty())
-          cellAreas.resize(vc.nr*nc_);
+          cellAreas.resize(uint(vc.nr*nc_));
 
-        cellAreas[vc.r*nc_ + vc.c] = &vc;
+        cellAreas[uint(vc.r*nc_ + vc.c)] = &vc;
       }
     }
   }
@@ -2204,7 +2212,7 @@ drawHHeaderSection(QPainter *painter, int c, const VisColumnData &visColumnData)
   initPen();
 
   for (int r = 0; r < ns; ++r) {
-    const RectSpan &rectSpan = rowRects[r];
+    const RectSpan &rectSpan = rowRects[uint(r)];
 
     //---
 
@@ -2769,7 +2777,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
     auto *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
 
     if (idelegate) {
-      const ColumnData &columnData = columnDatas_[c];
+      const ColumnData &columnData = columnDatas_[uint(c)];
 
       idelegate->setHeatmap(columnData.heatmap);
     }
@@ -2819,7 +2827,7 @@ updateVisColumns()
 
     //---
 
-    const ColumnData &columnData = columnDatas_[c];
+    const ColumnData &columnData = columnDatas_[uint(c)];
 
     int cw = (columnData.width > 0 ? columnData.width : 100);
     int x2 = x1 + cw;
@@ -3042,7 +3050,7 @@ updateVisRows()
     globalRowData_.vheaderWidth += 2*globalRowData_.margin;
   }
   else if (verticalType() == VerticalType::NUMBER) {
-    int n = (nr_ > 0 ? std::log10(nr_) + 1 : 1);
+    int n = (nr_ > 0 ? int(std::log10(nr_) + 1) : 1);
 
     globalRowData_.vheaderWidth = n*paintData_.fm.width("8") + 2*globalRowData_.margin;
   }
@@ -3145,11 +3153,11 @@ isNumericColumn(int c) const
 {
   auto type = CQBaseModelType::STRING;
 
-  auto tvar = model_->headerData(c, Qt::Horizontal, (int) CQBaseModelRole::Type);
+  auto tvar = model_->headerData(c, Qt::Horizontal, static_cast<int>(CQBaseModelRole::Type));
   if (! tvar.isValid()) return false;
 
   bool ok;
-  type = (CQBaseModelType) tvar.toInt(&ok);
+  type = static_cast<CQBaseModelType>(tvar.toInt(&ok));
   if (! ok) return false;
 
   //---
@@ -3171,11 +3179,13 @@ void
 CQModelView::
 filterColumn(int column)
 {
-  auto *le = filterEdits_[column];
+  assert(column >= 0);
+
+  auto *le = filterEdits_[uint(column)];
 
   auto parent = rootIndex();
 
-  auto filterStr = le->text().simplified();
+  auto filterStr = le->text().trimmed();
 
   if (filterStr.length()) {
     QRegExp regexp(filterStr, Qt::CaseSensitive, QRegExp::Wildcard);
@@ -3278,7 +3288,7 @@ handleMousePress()
   }
   // horizontal header section handle pressed
   else if (mouseData_.pressData.hsectionh >= 0) {
-    const ColumnData &columnData = columnDatas_[mouseData_.pressData.hsectionh];
+    const ColumnData &columnData = columnDatas_[uint(mouseData_.pressData.hsectionh)];
 
     int cw = (columnData.width > 0 ? columnData.width : 100);
 
@@ -3352,7 +3362,7 @@ handleMouseMove()
   else if (mouseData_.pressData.hsectionh >= 0) {
     int dx = mouseData_.moveData.pos.x() - mouseData_.pressData.pos.x();
 
-    ColumnData &columnData = columnDatas_[mouseData_.pressData.hsectionh];
+    ColumnData &columnData = columnDatas_[uint(mouseData_.pressData.hsectionh)];
 
     columnData.width = std::min(std::max(mouseData_.headerWidth + dx, 4), 9999);
 
@@ -3861,7 +3871,7 @@ addMenuActions(QMenu *menu)
     if (idelegate && idelegate->isNumericColumn(column)) {
       auto *decorationMenu = addMenu("Decoration");
 
-      const ColumnData &columnData = columnDatas_[column];
+      const ColumnData &columnData = columnDatas_[uint(column)];
 
       addCheckedAction(decorationMenu, "Show Heatmap", columnData.heatmap,
                        SLOT(setHeatmapSlot(bool)));
@@ -4406,7 +4416,7 @@ filterByValueSlot()
   if (ind.isValid()) {
     auto str = model_->data(ind, Qt::DisplayRole).toString();
 
-    auto *le = filterEdits_[ind.column()];
+    auto *le = filterEdits_[uint(ind.column())];
 
     le->setText(str);
 
@@ -4453,6 +4463,8 @@ void
 CQModelView::
 resizeColumnToContents(int column)
 {
+  assert(column >= 0);
+
   int maxWidth = 0;
 
   //---
@@ -4504,7 +4516,7 @@ resizeColumnToContents(int column)
 
   //---
 
-  ColumnData &columnData = columnDatas_[column];
+  ColumnData &columnData = columnDatas_[uint(column)];
 
   columnData.width = std::max(maxWidth, 16);
 
@@ -4584,7 +4596,7 @@ void
 CQModelView::
 setHeatmapSlot(bool b)
 {
-  ColumnData &columnData = columnDatas_[mouseData_.menuData.column()];
+  ColumnData &columnData = columnDatas_[uint(mouseData_.menuData.column())];
 
   columnData.heatmap = b;
 

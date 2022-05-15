@@ -237,7 +237,7 @@ event(QEvent *e)
 #if 0
   switch (e->type()) {
     case QEvent::HoverEnter: {
-      QHoverEvent *he = static_cast<QHoverEvent*>(e);
+      auto *he = static_cast<QHoverEvent*>(e);
       d->hover = logicalIndexAt(he->pos());
       if (d->hover != -1)
         updateSection(d->hover);
@@ -251,7 +251,7 @@ event(QEvent *e)
       break;
     }
     case QEvent::HoverMove: {
-      QHoverEvent *he = static_cast<QHoverEvent*>(e);
+      auto *he = static_cast<QHoverEvent*>(e);
       int oldHover = d->hover;
       d->hover = logicalIndexAt(he->pos());
       if (d->hover != oldHover) {
@@ -280,7 +280,7 @@ viewportEvent(QEvent *e)
   // TODO: handle FontChange, StyleChange, Hide, Show (resizeSections, geometriesChanged)
   switch (e->type()) {
     case QEvent::ToolTip: {
-      QHelpEvent *he = static_cast<QHelpEvent*>(e);
+      auto *he = static_cast<QHelpEvent*>(e);
 
       CQModelView::PositionData posData;
 
