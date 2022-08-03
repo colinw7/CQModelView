@@ -34,7 +34,7 @@ paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &
     QItemDelegate::paint(painter, option, index);
 
     if (isEditable_ && isMouseOver_) {
-      auto type = (CQBaseModelType) itype;
+      auto type = static_cast<CQBaseModelType>(itype);
 
       bool numeric = (type == CQBaseModelType::REAL || type == CQBaseModelType::INTEGER);
 
@@ -57,10 +57,10 @@ drawType(QPainter *painter, const QStyleOptionViewItem &option,
   // TODO: validate cast
   auto type = CQBaseModelType::STRING;
 
-  auto tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Type);
+  auto tvar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::Type));
 
   if (! tvar.isValid())
-    tvar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::BaseType);
+    tvar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::BaseType));
 
   if (tvar.isValid()) {
     bool ok;
@@ -141,15 +141,15 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   // get min/max for column
   auto *model = view_->model();
 
-  auto minVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Min);
+  auto minVar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::Min));
 
   if (! minVar.isValid())
-    minVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::DataMin);
+    minVar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::DataMin));
 
-  auto maxVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::Max);
+  auto maxVar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::Max));
 
   if (! maxVar.isValid())
-    maxVar = model->headerData(index.column(), Qt::Horizontal, (int) CQBaseModelRole::DataMax);
+    maxVar = model->headerData(index.column(), Qt::Horizontal, int(CQBaseModelRole::DataMax));
 
   if (! minVar.isValid() || ! maxVar.isValid())
     return false;
@@ -237,16 +237,16 @@ isNumericColumn(int column) const
 
   auto type = CQBaseModelType::STRING;
 
-  auto tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::Type);
+  auto tvar = model->headerData(column, Qt::Horizontal, int(CQBaseModelRole::Type));
 
   if (! tvar.isValid())
-    tvar = model->headerData(column, Qt::Horizontal, (int) CQBaseModelRole::BaseType);
+    tvar = model->headerData(column, Qt::Horizontal, int(CQBaseModelRole::BaseType));
 
   if (! tvar.isValid())
     return false;
 
   bool ok;
-  type = (CQBaseModelType) tvar.toInt(&ok);
+  type = static_cast<CQBaseModelType>(tvar.toInt(&ok));
   if (! ok) return false;
 
   //---

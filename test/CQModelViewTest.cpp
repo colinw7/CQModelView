@@ -8,7 +8,11 @@
 #endif
 #include <CArgs.h>
 
+#ifdef USE_CQ_APP
+#include <CQApp.h>
+#else
 #include <QApplication>
+#endif
 #include <QHBoxLayout>
 #include <QTreeView>
 #include <QTableView>
@@ -22,7 +26,11 @@
 int
 main(int argc, char **argv)
 {
+#ifdef USE_CQ_APP
+  CQApp app(argc, argv);
+#else
   QApplication app(argc, argv);
+#endif
 
   QFont font("FreeSans", 18);
 
@@ -56,7 +64,7 @@ main(int argc, char **argv)
 
   //---
 
-  CQModelViewTest *test = new CQModelViewTest(! noDelegate);
+  auto *test = new CQModelViewTest(! noDelegate);
 
   test->setCommentHeader    (comment_header);
   test->setFirstLineHeader  (first_line_header);
@@ -78,15 +86,15 @@ main(int argc, char **argv)
 CQModelViewTest::
 CQModelViewTest(bool useDelegate)
 {
-  QVBoxLayout *layout = new QVBoxLayout(this);
+  auto *layout = new QVBoxLayout(this);
   layout->setMargin(2); layout->setSpacing(2);
 
   //---
 
-  QFrame *viewFrame = new QFrame;
+  auto *viewFrame = new QFrame;
   viewFrame->setObjectName("viewFrame");
 
-  QHBoxLayout *viewLayout = new QHBoxLayout(viewFrame);
+  auto *viewLayout = new QHBoxLayout(viewFrame);
   viewLayout->setMargin(2); viewLayout->setSpacing(2);
 
   layout->addWidget(viewFrame);
@@ -159,10 +167,10 @@ CQModelViewTest(bool useDelegate)
 
   //---
 
-  QFrame *statusFrame = new QFrame;
+  auto *statusFrame = new QFrame;
   statusFrame->setObjectName("statusFrame");
 
-  QHBoxLayout *statusLayout = new QHBoxLayout(statusFrame);
+  auto *statusLayout = new QHBoxLayout(statusFrame);
   statusLayout->setMargin(2); statusLayout->setSpacing(2);
 
   statusFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -174,7 +182,7 @@ CQModelViewTest(bool useDelegate)
 
   statusLayout->addWidget(statusLabel_);
 
-  QCheckBox *gridCheck = new QCheckBox("Grid");
+  auto *gridCheck = new QCheckBox("Grid");
 
   statusLayout->addWidget(gridCheck);
 
