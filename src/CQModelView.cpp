@@ -1105,7 +1105,7 @@ updateWidgetGeometries()
   //---
 
   globalRowData_   .headerHeight = ncr*(fh + 1) + 2*globalRowData_.margin;
-  globalColumnData_.headerWidth  = paintData_.fm.width("X") + 2*globalRowData_.margin;
+  globalColumnData_.headerWidth  = paintData_.fm.horizontalAdvance("X") + 2*globalRowData_.margin;
   globalRowData_   .height       = fh + globalRowData_.margin;
 
   // space for headers
@@ -2483,7 +2483,7 @@ drawVHeader(QPainter *painter) const
 
         auto text = QString::number(rowData.row + 1);
 
-        int dx = globalRowData_.vheaderWidth - 2*m - paintData_.fm.width(text);
+        int dx = globalRowData_.vheaderWidth - 2*m - paintData_.fm.horizontalAdvance(text);
 
         painter->drawText(option.rect.topLeft() + QPoint(m + dx, dy), text);
       }
@@ -3044,7 +3044,8 @@ updateVisRows()
       auto str = data.toString();
       if (! str.length()) continue;
 
-      globalRowData_.vheaderWidth = std::max(globalRowData_.vheaderWidth, paintData_.fm.width(str));
+      globalRowData_.vheaderWidth =
+        std::max(globalRowData_.vheaderWidth, paintData_.fm.horizontalAdvance(str));
     }
 
     globalRowData_.vheaderWidth += 2*globalRowData_.margin;
@@ -3052,7 +3053,7 @@ updateVisRows()
   else if (verticalType() == VerticalType::NUMBER) {
     int n = (nr_ > 0 ? int(std::log10(nr_) + 1) : 1);
 
-    globalRowData_.vheaderWidth = n*paintData_.fm.width("8") + 2*globalRowData_.margin;
+    globalRowData_.vheaderWidth = n*paintData_.fm.horizontalAdvance("8") + 2*globalRowData_.margin;
   }
 }
 
@@ -4481,10 +4482,10 @@ resizeColumnToContents(int column)
     auto strs = str.split(QRegExp("\n|\r\n|\r"));
 
     for (int i = 0; i < strs.length(); ++i)
-      w = std::max(w, paintData_.fm.width(strs[i]));
+      w = std::max(w, paintData_.fm.horizontalAdvance(strs[i]));
   }
   else
-    w = std::max(w, paintData_.fm.width(str));
+    w = std::max(w, paintData_.fm.horizontalAdvance(str));
 
   maxWidth = std::max(maxWidth, w);
 
@@ -4561,10 +4562,10 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
     for (int i = 0; i < nl; ++i) {
       const auto &str = strs[i];
 
-      w = std::max(w, paintData_.fm.width(str));
+      w = std::max(w, paintData_.fm.horizontalAdvance(str));
     }
 #else
-    w = paintData_.fm.width(data.toString());
+    w = paintData_.fm.horizontalAdvance(data.toString());
 #endif
 
     if (isHierarchical() && column == 0)

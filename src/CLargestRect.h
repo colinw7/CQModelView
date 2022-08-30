@@ -1,6 +1,8 @@
 #ifndef CLargestRect_H
 #define CLargestRect_H
 
+#include <iostream>
+
 // Template class to extract largest rectange from array of values DATA of type VALUE
 //
 // DATA must support the getValue(int ix, int iy) method.
@@ -75,14 +77,14 @@ class CLargestRect {
       width1 = 0;
 
       for (int x = 0; x < width_ + 1; ++x) {
-        auto x1 = uint(x);
+        auto xi = uint(x);
 
-        if      (c[x1] > width1) {
+        if      (c[xi] > width1) {
           s.push_back(Xw(x, width1));
 
-          width1 = c[x1];
+          width1 = c[xi];
         }
-        else if (c[x1] < width1) {
+        else if (c[xi] < width1) {
           do {
             xw = s.back(); s.pop_back();
 
@@ -95,9 +97,9 @@ class CLargestRect {
             }
 
             width1 = w0;
-          } while (c[x1] < width1);
+          } while (c[xi] < width1);
 
-          width1 = c[x1];
+          width1 = c[xi];
 
           if (width1 != 0)
             s.push_back(Xw(x0, w0));
@@ -111,12 +113,12 @@ class CLargestRect {
  private:
   void updateCache(int y, std::vector<int> &c, const VALUE &value) const {
     for (int x = 0; x < width_; ++x) {
-      auto x1 = uint(x);
+      auto xi = uint(x);
 
       if (data_.getValue(x, y) == value)
-        c[x1]++;
+        c[xi]++;
       else
-        c[x1] = 0;
+        c[xi] = 0;
     }
   }
 
