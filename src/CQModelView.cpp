@@ -1439,6 +1439,13 @@ paintEvent(QPaintEvent *e)
 
   painter.fillRect(viewport()->rect(), c);
 
+  auto isDarkColor = [](const QColor &c) {
+    int gray = qGray(c.red(), c.green(), c.blue());
+    return (gray <= 127);
+  };
+
+  isDark_ = isDarkColor(c);
+
   //---
 
   paintData_.fm = QFontMetrics(font());

@@ -87,9 +87,14 @@ class CQModelView : public QAbstractItemView {
 //Q_PROPERTY(bool allColumnsShowFocus  READ allColumnsShowFocus  WRITE setAllColumnsShowFocus )
   Q_PROPERTY(bool expandsOnDoubleClick READ expandsOnDoubleClick WRITE setExpandsOnDoubleClick)
 
-  Q_PROPERTY(QColor headerBg    READ headerBg    WRITE setHeaderBg   )
-  Q_PROPERTY(QColor selectionBg READ selectionBg WRITE setSelectionBg)
-  Q_PROPERTY(QColor selectionFg READ selectionFg WRITE setSelectionFg)
+  Q_PROPERTY(QColor headerLightBg READ headerLightBg WRITE setHeaderLightBg)
+  Q_PROPERTY(QColor headerDarkBg  READ headerDarkBg  WRITE setHeaderDarkBg )
+
+  Q_PROPERTY(QColor selectionLightBg READ selectionLightBg WRITE setSelectionLightBg)
+  Q_PROPERTY(QColor selectionDarkBg  READ selectionDarkBg  WRITE setSelectionDarkBg )
+
+  Q_PROPERTY(QColor selectionLightFg READ selectionLightFg WRITE setSelectionLightFg)
+  Q_PROPERTY(QColor selectionDarkFg  READ selectionDarkFg  WRITE setSelectionDarkFg )
 
   Q_ENUMS(VerticalType)
 
@@ -248,14 +253,33 @@ class CQModelView : public QAbstractItemView {
 
   //---
 
-  const QColor &headerBg() const { return headerBg_; }
-  void setHeaderBg(const QColor &c) { headerBg_ = c; update(); }
+  const QColor &headerLightBg() const { return headerLightBg_; }
+  void setHeaderLightBg(const QColor &c) { headerLightBg_ = c; update(); }
 
-  const QColor &selectionBg() const { return selectionBg_; }
-  void setSelectionBg(const QColor &v) { selectionBg_ = v; }
+  const QColor &headerDarkBg() const { return headerDarkBg_; }
+  void setHeaderDarkBg(const QColor &c) { headerDarkBg_ = c; update(); }
 
-  const QColor &selectionFg() const { return selectionFg_; }
-  void setSelectionFg(const QColor &v) { selectionFg_ = v; }
+  QColor headerBg() const { return (isDark_ ? headerDarkBg() : headerLightBg()); }
+
+  //---
+
+  const QColor &selectionLightBg() const { return selectionLightBg_; }
+  void setSelectionLightBg(const QColor &v) { selectionLightBg_ = v; }
+
+  const QColor &selectionDarkBg() const { return selectionDarkBg_; }
+  void setSelectionDarkBg(const QColor &v) { selectionDarkBg_ = v; }
+
+  QColor selectionBg() const { return (isDark_ ? selectionDarkBg() : selectionLightBg()); }
+
+  //---
+
+  const QColor &selectionLightFg() const { return selectionLightFg_; }
+  void setSelectionLightFg(const QColor &v) { selectionLightFg_ = v; }
+
+  const QColor &selectionDarkFg() const { return selectionDarkFg_; }
+  void setSelectionDarkFg(const QColor &v) { selectionDarkFg_ = v; }
+
+  QColor selectionFg() const { return (isDark_ ? selectionDarkFg() : selectionLightFg()); }
 
   //---
 
@@ -767,9 +791,14 @@ class CQModelView : public QAbstractItemView {
   bool rootIsDecorated_      { true };
   bool expandsOnDoubleClick_ { true };
 
-  QColor headerBg_    { "#DDDDEE" };
-  QColor selectionBg_ { "#7F7F7F" };
-  QColor selectionFg_ { "#000000" };
+  QColor headerLightBg_ { "#DDDDEE" };
+  QColor headerDarkBg_  { "#515A6D" };
+
+  QColor selectionLightBg_ { "#7F7F7F" };
+  QColor selectionDarkBg_  { "#7F7F7F" };
+
+  QColor selectionLightFg_ { "#000000" };
+  QColor selectionDarkFg_  { "#ffffff" };
 
   CQModelViewCornerButton *cornerWidget_ { nullptr };
 
@@ -830,6 +859,8 @@ class CQModelView : public QAbstractItemView {
   QRect paintRect_;
 
   int sortRole_ { -1 };
+
+  bool isDark_ { false };
 };
 
 //---
