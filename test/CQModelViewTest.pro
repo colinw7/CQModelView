@@ -6,7 +6,7 @@ DEPENDPATH += .
 
 INCLUDEPATH += ../include .
 
-QMAKE_CXXFLAGS += -std=c++14
+QMAKE_CXXFLAGS += -std=c++17
 
 CONFIG += debug
 

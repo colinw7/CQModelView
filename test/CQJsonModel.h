@@ -8,16 +8,33 @@
 class CQJsonModel : public CQBaseModel {
   Q_OBJECT
 
-  Q_PROPERTY(bool hierarchical READ isHierarchical WRITE setHierarchical)
-  Q_PROPERTY(bool flat         READ isFlat         WRITE setFlat        )
-  Q_PROPERTY(bool readOnly     READ isReadOnly     WRITE setReadOnly    )
+  Q_PROPERTY(bool hierarchical     READ isHierarchical     WRITE setHierarchical    )
+  Q_PROPERTY(bool flat             READ isFlat             WRITE setFlat            )
+  Q_PROPERTY(bool readOnly         READ isReadOnly         WRITE setReadOnly        )
+  Q_PROPERTY(bool allowSingleQuote READ isAllowSingleQuote WRITE setAllowSingleQuote)
+
+ private:
+  using ColumnValues = std::vector<QVariantList>;
+
+  struct ColumnArrayData {
+    int          numRows { -1 };
+    QStringList  headerNames;
+    ColumnValues columnValues;
+  };
 
  public:
   CQJsonModel();
 
  ~CQJsonModel();
 
+  //---
+
   bool load(const QString &filename);
+
+  void save(std::ostream &os);
+  void save(QAbstractItemModel *model, std::ostream &os);
+
+  //---
 
   const QString &filename() const { return filename_; }
   void setFilename(const QString &s) { filename_ = s; }
@@ -30,6 +47,9 @@ class CQJsonModel : public CQBaseModel {
 
   bool isReadOnly() const { return readOnly_; }
   void setReadOnly(bool b) { readOnly_ = b; }
+
+  bool isAllowSingleQuote() const { return allowSingleQuote_; }
+  void setAllowSingleQuote(bool b) { allowSingleQuote_ = b; }
 
   //---
 
@@ -71,20 +91,25 @@ class CQJsonModel : public CQBaseModel {
 
   QString parentName(CJson::Value *value) const;
 
- protected:
-  typedef std::vector<QString> Cells;
-  typedef std::vector<Cells>   Data;
+  bool isColumnArray(ColumnArrayData &data) const;
 
-  QString       filename_;
-  CJson*        json_      { nullptr };
-  CJson::ValueP jsonValue_;
-  QString       jsonMatch_;
-  CJson::Values jsonValues_;
-  bool          hier_      { false };
-  bool          flat_      { false };
-  bool          readOnly_  { false };
-  QString       hierName_;
-  QStringList   hierColumns_;
+ protected:
+  using Cells = std::vector<QString>;
+  using Data  = std::vector<Cells>;
+
+  QString         filename_;
+  CJson*          json_             { nullptr };
+  CJson::ValueP   jsonValue_;
+  QString         jsonMatch_;
+  CJson::Values   jsonValues_;
+  bool            hier_             { false };
+  bool            flat_             { false };
+  bool            readOnly_         { false };
+  bool            allowSingleQuote_ { false };
+  bool            columnArray_      { false };
+  ColumnArrayData columnArrayData_;
+  QString         hierName_;
+  QStringList     hierColumns_;
 };
 
 #endif

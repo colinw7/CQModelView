@@ -15,6 +15,7 @@
 #include <svg/fit_column_svg.h>
 #include <svg/sort_az_svg.h>
 #include <svg/sort_za_svg.h>
+#include <svg/select_all_svg.h>
 
 #include <QAbstractItemModel>
 #include <QSortFilterProxyModel>
@@ -78,11 +79,6 @@ CQModelView(QWidget *parent) :
   //---
 
   cornerWidget_ = new CQModelViewCornerButton(this);
-
-  cornerWidget_->setToolTip("Select All");
-
-  // TODO: allow config
-  connect(cornerWidget_, SIGNAL(clicked()), this, SLOT(selectAll()));
 }
 
 CQModelView::
@@ -442,6 +438,13 @@ selectCellRange(const QModelIndex &ind1, const QModelIndex &ind2, Qt::KeyboardMo
     sm_->select(selection, QItemSelectionModel::Select);
 
   sm_->setCurrentIndex(ind2, QItemSelectionModel::NoUpdate);
+}
+
+void
+CQModelView::
+selectAllSlot()
+{
+  selectAll();
 }
 
 void
@@ -5203,11 +5206,85 @@ clearCurrentIndex()
 
 CQModelViewCornerButton::
 CQModelViewCornerButton(CQModelView *view) :
- QAbstractButton(view)
+ QAbstractButton(view), view_(view)
 {
   setObjectName("corner");
 
   setFocusPolicy(Qt::NoFocus);
+
+  setToolTip("Select All");
+
+  setClickOp(ClickOp::FIT_ALL);
+
+  int is = QFontMetrics(font()).height() + 6;
+
+  setIconSize(QSize(is, is));
+
+  connect(this, SIGNAL(clicked()), this, SLOT(clickSlot()));
+}
+
+void
+CQModelViewCornerButton::
+setClickOp(const ClickOp &o)
+{
+  clickOp_ = o;
+
+  auto is = iconSize().height();
+
+  switch (clickOp_) {
+    case ClickOp::FIT_ALL:
+      setToolTip("Fit All");
+      pixmap_ = QPixmap::fromImage(FIT_ALL_COLUMNS_SVG().image(is, is));
+      break;
+    case ClickOp::SELECT_ALL:
+    default:
+      setToolTip("Select All");
+      pixmap_ = QPixmap::fromImage(SELECT_ALL_SVG().image(is, is));
+      break;
+  }
+
+  setIcon(QIcon(pixmap_));
+}
+
+void
+CQModelViewCornerButton::
+clickSlot()
+{
+  switch (clickOp_) {
+    case ClickOp::FIT_ALL   : view_->fitAllColumnsSlot(); break;
+    case ClickOp::SELECT_ALL: view_->selectAll        (); break;
+  }
+}
+
+void
+CQModelViewCornerButton::
+contextMenuEvent(QContextMenuEvent *e)
+{
+  auto *menu = new QMenu;
+
+  //---
+
+  auto addAction = [&](QMenu *menu, const QString &name, const char *slotName=nullptr) {
+    auto *action = menu->addAction(name);
+
+    if (slotName)
+      connect(action, SIGNAL(triggered()), view_, slotName);
+
+    return action;
+  };
+
+  auto is = iconSize().height();
+
+  addAction(menu, "Fit All"   , SLOT(fitNoScrollSlot()))->
+    setIcon(QIcon(QPixmap::fromImage(FIT_ALL_COLUMNS_SVG().image(is, is))));
+  addAction(menu, "Select All", SLOT(selectAllSlot()))->
+    setIcon(QIcon(QPixmap::fromImage(SELECT_ALL_SVG().image(is, is))));
+
+  //---
+
+  (void) menu->exec(e->globalPos());
+
+  delete menu;
 }
 
 void
@@ -5235,7 +5312,20 @@ paintEvent(QPaintEvent*)
 
   QPainter painter(this);
 
+  painter.save();
+
   style()->drawControl(QStyle::CE_Header, &opt, &painter, this);
+
+  painter.restore();
+
+  //painter.drawPixmap(opt.rect, pixmap_);
+
+  auto pw = pixmap_.width ();
+  auto ph = pixmap_.height();
+
+  auto c = rect().center();
+
+  painter.drawPixmap(c.x() - pw/2, c.y() - ph/2, pixmap_);
 }
 
 //------

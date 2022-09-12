@@ -24,6 +24,8 @@ load(const QString &filename)
   // parse file into array of fields
   json_ = new CJson;
 
+  json_->setAllowSingleQuote(isAllowSingleQuote());
+
   if (! json_->loadFile(filename.toStdString(), jsonValue_)) {
     std::cerr << "Parse failed" << std::endl;
     return false;
@@ -34,11 +36,76 @@ load(const QString &filename)
   if (isRootHierarchical(hierName_, hierColumns_))
     setHierarchical(true);
 
+  if (isColumnArray(columnArrayData_))
+    columnArray_ = true;
+
   //---
 
   resetColumnTypes();
 
   return true;
+}
+
+void
+CQJsonModel::
+save(std::ostream &os)
+{
+  save(this, os);
+}
+
+void
+CQJsonModel::
+save(QAbstractItemModel *model, std::ostream &os)
+{
+  int nc = model->columnCount();
+  int nr = model->rowCount();
+
+  //---
+
+  QStringList strs;
+
+  for (int c = 0; c < nc; ++c) {
+    auto var = model->headerData(c, Qt::Horizontal);
+
+    strs << var.toString();
+  }
+
+  os << "[\n";
+
+  for (int r = 0; r < nr; ++r) {
+    os << "  {\n";
+
+    for (int c = 0; c < nc; ++c) {
+      auto ind = model->index(r, c);
+
+      auto var = model->data(ind);
+
+      os << "    \"" << strs[c].toStdString() << "\": ";
+
+      if      (var.type() == QVariant::Int)
+        os << var.toInt();
+      else if (var.type() == QVariant::LongLong)
+        os << var.toLongLong();
+      else if (var.type() == QVariant::Double)
+        os << var.toDouble();
+      else
+        os << "\"" << var.toString().toStdString() << "\"";
+
+      if (c != nc - 1)
+        os << ",";
+
+      os << "\n";
+    }
+
+    os << "  }";
+
+    if (r != nr - 1)
+      os << ",";
+
+    os << "\n";
+  }
+
+  os << "]\n";
 }
 
 bool
@@ -49,7 +116,7 @@ isRootHierarchical(QString &hierName, QStringList &hierColumns) const
   if (jsonValue_->isObject()) {
     ColumnMap columnMap;
 
-    CJson::Object *obj = jsonValue_->cast<CJson::Object>();
+    auto *obj = jsonValue_->cast<CJson::Object>();
 
     // get name of single array child
     std::string   arrayName;
@@ -97,12 +164,12 @@ CQJsonModel::
 isArrayHierarchical(const std::string &name, CJson::Array *array, ColumnMap &columnMap) const
 {
   for (uint i = 0; i < array->size(); ++i) {
-    CJson::ValueP value = array->at(i);
+    auto value = array->at(i);
 
     if (! value->isObject())
       return false;
 
-    CJson::Object *obj = value->cast<CJson::Object>();
+    auto *obj = value->cast<CJson::Object>();
 
     if (! isObjHierarchical(name, obj, columnMap))
       return false;
@@ -148,6 +215,76 @@ isObjHierarchical(const std::string &name, CJson::Object *obj, ColumnMap &column
 
 bool
 CQJsonModel::
+isColumnArray(ColumnArrayData &data) const
+{
+  if (! jsonValue_->isObject())
+    return false;
+
+  ColumnMap columnMap;
+
+  auto *obj = jsonValue_->cast<CJson::Object>();
+
+  data.numRows = -1;
+
+  for (const auto &nv : obj->nameValueMap()) {
+    if (! nv.second->isArray())
+      return false;
+
+    auto *arr = nv.second->cast<CJson::Array>();
+
+    int n = int(arr->size());
+
+    if      (data.numRows == -1)
+      data.numRows = n;
+    else if (n != data.numRows)
+      return false;
+  }
+
+  //---
+
+  // set header names
+  std::vector<std::string> names;
+
+  obj->getNames(names);
+
+  for (const auto &name : names)
+    data.headerNames.push_back(QString::fromStdString(name));
+
+  //---
+
+  // set column data
+  data.columnValues.resize(size_t(data.numRows));
+
+  int c = 0;
+
+  for (const auto &nv : obj->nameValueArray()) {
+    auto *arr = nv.second->cast<CJson::Array>();
+
+    for (int r = 0; r < data.numRows; ++r) {
+      auto value = arr->at(uint(r));
+
+      QVariant var;
+
+      if      (value->isString())
+        var = QString::fromStdString(value->cast<CJson::String>()->value());
+      else if (value->isNumber())
+        var = value->cast<CJson::Number>()->value();
+      else if (value->isTrue())
+        var = QVariant(true);
+      else if (value->isFalse())
+        var = QVariant(false);
+
+      data.columnValues[size_t(c)].push_back(var);
+    }
+
+    ++c;
+  }
+
+  return true;
+}
+
+bool
+CQJsonModel::
 applyMatch(const QString &match)
 {
   CJson::Values values;
@@ -176,7 +313,7 @@ columnCount(const QModelIndex &index) const
 {
   if (jsonMatch_ != "") {
     if (! jsonValues_.empty())
-      return jsonValues_[0]->numValues();
+      return int(jsonValues_[0]->numValues());
     else
       return 0;
   }
@@ -186,14 +323,15 @@ columnCount(const QModelIndex &index) const
 
   //---
 
-  if (isHierarchical()) {
+  if      (isHierarchical()) {
     return hierColumns_.length();
   }
+  else if (columnArray_) {
+    return columnArrayData_.headerNames.length();
+  }
   else {
-    CJson::Value *value = static_cast<CJson::Value *>(index.internalPointer());
-
-    if (! value)
-      value = jsonValue_.get();
+    auto *value = static_cast<CJson::Value *>(index.internalPointer());
+    if (! value) value = jsonValue_.get();
 
     if      (value->isObject()) {
       return 2;
@@ -213,7 +351,7 @@ rowCount(const QModelIndex &parent) const
 {
   if (jsonMatch_ != "") {
     if (! parent.isValid())
-      return jsonValues_.size();
+      return int(jsonValues_.size());
 
     return 0;
   }
@@ -225,12 +363,12 @@ rowCount(const QModelIndex &parent) const
 
   //---
 
-  if (isHierarchical()) {
+  if      (isHierarchical()) {
     if (parent.isValid()) {
-      CJson::Value *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
+      auto *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
       assert(parentValue);
 
-      CJson::Object *parentObj = parentValue->cast<CJson::Object>();
+      auto *parentObj = parentValue->cast<CJson::Object>();
       assert(parentObj);
 
       CJson::ValueP value;
@@ -239,27 +377,33 @@ rowCount(const QModelIndex &parent) const
       if (! parentObj->getNamedValue(hierName_.toStdString(), value))
         return 0;
 
-      CJson::Array *childArray = value->cast<CJson::Array>();
+      auto *childArray = value->cast<CJson::Array>();
 
-      return childArray->size();
+      return int(childArray->size());
     }
     else {
       return 1;
     }
   }
+  else if (columnArray_) {
+    if (parent.isValid())
+      return 0;
+
+    return columnArrayData_.numRows;
+  }
   else {
-    CJson::Value *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
+    auto *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
 
     if (! parentValue)
       parentValue = jsonValue_.get();
 
     if      (parentValue->isObject()) {
-      CJson::Object *obj = parentValue->cast<CJson::Object>();
+      auto *obj = parentValue->cast<CJson::Object>();
 
-      return obj->nameValueMap().size();
+      return int(obj->nameValueMap().size());
     }
     else if (parentValue->isArray()) {
-      return parentValue->numValues();
+      return int(parentValue->numValues());
     }
     else
       return 0;
@@ -283,7 +427,7 @@ headerData(int section, Qt::Orientation orientation, int role) const
     QString str;
 
     if (headerString(section, str)) {
-      CQBaseModelType type = columnType(section);
+      auto type = columnType(section);
 
       str += ":" + typeName(type);
 
@@ -308,22 +452,26 @@ headerString(int section, QString &str) const
     return false;
 
   if (jsonMatch_ != "") {
-    CJson::ValueP value = jsonValues_[0];
+    auto value = jsonValues_[0];
 
     if (section < int(value->numValues())) {
-      str = value->indexKey(section).c_str();
+      str = value->indexKey(uint(section)).c_str();
       return true;
     }
 
     return false;
   }
 
-  if (isHierarchical()) {
+  if      (isHierarchical()) {
     str = hierColumns_[section];
     return true;
   }
+  else if (columnArray_) {
+    str = columnArrayData_.headerNames[section];
+    return true;
+  }
   else {
-    CJson::ValueP parentValue = jsonValue_;
+    auto parentValue = jsonValue_;
 
     if      (parentValue->isObject()) {
       if (section == 0) { str = "Name" ; return true; }
@@ -331,10 +479,10 @@ headerString(int section, QString &str) const
     }
     else if (parentValue->isArray()) {
       if (parentValue->indexValue(0)->isComposite()) {
-        CJson::ValueP value1 = parentValue->indexValue(0);
+        auto value1 = parentValue->indexValue(0);
 
         if (section >= 0 && section < int(value1->numValues())) {
-          str = value1->indexKey(section).c_str();
+          str = value1->indexKey(uint(section)).c_str();
           return true;
         }
       }
@@ -355,27 +503,27 @@ QString
 CQJsonModel::
 parentName(CJson::Value *value) const
 {
-  CJson::Value *parent = value->parent();
+  auto *parent = value->parent();
 
   if (! parent)
     return "";
 
   if      (parent->isObject()) {
-    CJson::Object *obj = parent->cast<CJson::Object>();
+    auto *obj = parent->cast<CJson::Object>();
 
     for (size_t i = 0; i < obj->nameValueMap().size(); ++i) {
       std::string   name1;
       CJson::ValueP value1;
 
-      if (obj->indexNameValue(i, name1, value1) && value1.get() == value)
+      if (obj->indexNameValue(uint(i), name1, value1) && value1.get() == value)
         return name1.c_str();
     }
   }
   else if (parent->isArray()) {
-    CJson::Array *array = parent->cast<CJson::Array>();
+    auto *array = parent->cast<CJson::Array>();
 
     for (size_t i = 0; i < array->size(); ++i) {
-      if (array->at(i).get() == value)
+      if (array->at(uint(i)).get() == value)
         return QString("%1").arg(i);
     }
   }
@@ -392,24 +540,24 @@ data(const QModelIndex &index, int role) const
       if (! index.isValid())
         return QVariant();
 
-      CJson::ValueP value = jsonValues_[index.row()];
+      auto value = jsonValues_[uint(index.row())];
 
       if (index.column() >= 0 && index.column() < int(value->numValues()))
-        return value->indexValue(index.column())->to_string().c_str();
+        return value->indexValue(uint(index.column()))->to_string().c_str();
 
       return QVariant();
     }
 
     //---
 
-    if (isHierarchical()) {
+    if      (isHierarchical()) {
       if (! index.isValid())
         return QVariant();
 
-      CJson::Value *value = static_cast<CJson::Value *>(index.internalPointer());
+      auto *value = static_cast<CJson::Value *>(index.internalPointer());
       assert(value);
 
-      CJson::Object *valueObj = value->cast<CJson::Object>();
+      auto *valueObj = value->cast<CJson::Object>();
       assert(valueObj);
 
       CJson::ValueP columnValue;
@@ -421,8 +569,11 @@ data(const QModelIndex &index, int role) const
 
       return columnValue->to_string().c_str();
     }
+    else if (columnArray_) {
+      return columnArrayData_.columnValues[size_t(index.column())][index.row()];
+    }
     else {
-      CJson::Value *value = static_cast<CJson::Value *>(index.internalPointer());
+      auto *value = static_cast<CJson::Value *>(index.internalPointer());
 
       if (! value)
         value = jsonValue_.get();
@@ -435,7 +586,7 @@ data(const QModelIndex &index, int role) const
 
       if      (value->isObject()) {
         if (isFlat()) {
-          CJson::Object *obj = value->cast<CJson::Object>();
+          auto *obj = value->cast<CJson::Object>();
           return obj->to_string().c_str();
         }
 
@@ -443,7 +594,7 @@ data(const QModelIndex &index, int role) const
       }
       else if (value->isArray()) {
         if (isFlat()) {
-          CJson::Array *array = value->cast<CJson::Array>();
+          auto *array = value->cast<CJson::Array>();
           return array->to_string().c_str();
         }
 
@@ -470,15 +621,15 @@ QModelIndex
 CQJsonModel::
 index(int row, int column, const QModelIndex &parent) const
 {
-  if (isHierarchical()) {
+  if      (isHierarchical()) {
     // at root
     if (! parent.isValid())
       return createIndex(0, column, jsonValue_.get());
 
-    CJson::Value *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
+    auto *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
     assert(parentValue);
 
-    CJson::Object *parentObj = parentValue->cast<CJson::Object>();
+    auto *parentObj = parentValue->cast<CJson::Object>();
     assert(parentObj);
 
     // parent must be non-root
@@ -486,9 +637,9 @@ index(int row, int column, const QModelIndex &parent) const
 
     // if hierarchical then return child object
     if (parentObj->getNamedValue(hierName_.toStdString(), value)) {
-      CJson::Array *childArray = value->cast<CJson::Array>();
+      auto *childArray = value->cast<CJson::Array>();
 
-      CJson::ValueP childValue = childArray->at(row);
+      auto childValue = childArray->at(uint(row));
 
       return createIndex(row, column, childValue.get());
     }
@@ -496,9 +647,12 @@ index(int row, int column, const QModelIndex &parent) const
       return QModelIndex();
     }
   }
+  else if (columnArray_) {
+    return createIndex(row, column, nullptr);
+  }
   else {
     // get parent row
-    CJson::Value *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
+    auto *parentValue = static_cast<CJson::Value *>(parent.internalPointer());
 
     if (! parentValue)
       parentValue = jsonValue_.get();
@@ -507,7 +661,7 @@ index(int row, int column, const QModelIndex &parent) const
     //  return createIndex(row, column, jsonValue_);
 
     if      (parentValue->isObject()) {
-      CJson::Object *obj = parentValue->cast<CJson::Object>();
+      auto *obj = parentValue->cast<CJson::Object>();
 
       if (row < 0 || row >= int(obj->nameValueMap().size()))
         return QModelIndex();
@@ -515,18 +669,18 @@ index(int row, int column, const QModelIndex &parent) const
       std::string   name;
       CJson::ValueP value;
 
-      if (! obj->indexNameValue(row, name, value))
+      if (! obj->indexNameValue(uint(row), name, value))
         return QModelIndex();
 
       return createIndex(row, column, value.get());
     }
     else if (parentValue->isArray()) {
-      CJson::Array *array = parentValue->cast<CJson::Array>();
+      auto *array = parentValue->cast<CJson::Array>();
 
       if (row < 0 || row >= int(array->size()))
         return QModelIndex();
 
-      return createIndex(row, column, array->at(row).get());
+      return createIndex(row, column, array->at(uint(row)).get());
     }
     else
       return QModelIndex();
@@ -541,49 +695,52 @@ parent(const QModelIndex &index) const
   if (! index.isValid())
     return QModelIndex();
 
-  if (isHierarchical()) {
-    CJson::Value *childValue = static_cast<CJson::Value *>(index.internalPointer());
+  if      (isHierarchical()) {
+    auto *childValue = static_cast<CJson::Value *>(index.internalPointer());
     assert(childValue);
 
-    CJson::Object *childObj = childValue->cast<CJson::Object>();
+    auto *childObj = childValue->cast<CJson::Object>();
     assert(childObj);
 
     if (! childObj->parent())
       return QModelIndex();
 
     // get parent object
-    CJson::Array *parentArray = childObj->parent()->cast<CJson::Array>();
+    auto *parentArray = childObj->parent()->cast<CJson::Array>();
     assert(parentArray);
 
-    CJson::Object *parentObj = parentArray->parent()->cast<CJson::Object>();
+    auto *parentObj = parentArray->parent()->cast<CJson::Object>();
     assert(parentObj);
 
     if (! parentObj->parent())
       return createIndex(0, 0, jsonValue_.get());
 
     // get parent, parent object
-    CJson::Array *parentParentArray = parentObj->parent()->cast<CJson::Array>();
+    auto *parentParentArray = parentObj->parent()->cast<CJson::Array>();
     assert(parentParentArray);
 
-    CJson::Object *parentParentObj = parentParentArray->parent()->cast<CJson::Object>();
+    auto *parentParentObj = parentParentArray->parent()->cast<CJson::Object>();
     assert(parentParentObj);
 
     // find index of parentObj in parentParentArray
     for (uint i = 0; i < parentParentArray->size(); ++i) {
       if (parentParentArray->at(i).get() == parentObj)
-        return createIndex(i, 0, parentObj);
+        return createIndex(int(i), 0, parentObj);
     }
 
     // always non-leaf parent
     return createIndex(0, 0, parentObj);
   }
+  else if (columnArray_) {
+    return QModelIndex();
+  }
   else {
-    CJson::Value *childValue = static_cast<CJson::Value *>(index.internalPointer());
+    auto *childValue = static_cast<CJson::Value *>(index.internalPointer());
 
     if (! childValue)
       return QModelIndex();
 
-    CJson::Value *parentValue = childValue->parent();
+    auto *parentValue = childValue->parent();
 
     if (! parentValue)
       return QModelIndex();
@@ -591,28 +748,28 @@ parent(const QModelIndex &index) const
     if (parentValue == jsonValue_.get())
       return createIndex(0, 0, jsonValue_.get());
 
-    CJson::Value *parentParentValue = parentValue->parent();
+    auto *parentParentValue = parentValue->parent();
 
     if (! parentParentValue)
       return createIndex(0, 0, jsonValue_.get());
 
     if      (parentParentValue->isObject()) {
-      CJson::Object *obj = parentParentValue->cast<CJson::Object>();
+      auto *obj = parentParentValue->cast<CJson::Object>();
 
       for (size_t i = 0; i < obj->nameValueMap().size(); ++i) {
         std::string   name;
         CJson::ValueP value;
 
-        if (obj->indexNameValue(i, name, value) && value.get() == parentValue)
-          return createIndex(i, 0, parentValue);
+        if (obj->indexNameValue(uint(i), name, value) && value.get() == parentValue)
+          return createIndex(int(i), 0, parentValue);
       }
     }
     else if (parentParentValue->isArray()) {
-      CJson::Array *array = parentParentValue->cast<CJson::Array>();
+      auto *array = parentParentValue->cast<CJson::Array>();
 
       for (size_t i = 0; i < array->size(); ++i) {
-        if (array->at(i).get() == parentValue)
-          return createIndex(i, 0, parentValue);
+        if (array->at(uint(i)).get() == parentValue)
+          return createIndex(int(i), 0, parentValue);
       }
     }
 
@@ -625,7 +782,7 @@ CQJsonModel::
 flags(const QModelIndex &index) const
 {
   if (! index.isValid())
-    return 0;
+    return Qt::ItemFlags();
 
   Qt::ItemFlags flags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 

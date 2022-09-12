@@ -47,7 +47,7 @@ stol(const std::string &str, bool &ok)
 {
   char *p;
 
-  int i = strtol(str.c_str(), &p, 10);
+  long i = strtol(str.c_str(), &p, 10);
 
   while (*p && isspace(*p))
     ++p;
@@ -62,8 +62,19 @@ bool
 CJson::
 readString(CStrParse &parse, std::string &str1)
 {
-  if (! parse.isChar('\"'))
-    return false;
+  char startChar = '\"';
+
+  if (isAllowSingleQuote()) {
+    if (! parse.isChar('\"') && ! parse.isChar('\''))
+      return errorMsg(parse, "Missing open quote for string");
+
+    if (parse.isChar('\''))
+      startChar = '\'';
+  }
+  else {
+    if (! parse.isChar('\"'))
+      return errorMsg(parse, "Missing double quote for string");
+  }
 
   parse.skipChar();
 
@@ -88,20 +99,20 @@ readString(CStrParse &parse, std::string &str1)
 
           for (int j = 0; j < 4; ++j) {
             if (! parse.isXDigit())
-              return false;
+              return errorMsg(parse, "Bad hex digit");
 
-            char c = parse.readChar();
+            char c1 = parse.readChar();
 
-            i = (i << 4) | (hexCharValue(c) & 0xF);
+            i = (i << 4) | (hexCharValue(c1) & 0xF);
           }
 
-          CUtf8::append(str1, i);
+          CUtf8::append(str1, ulong(i));
 
           break;
         }
         default: {
           if (isStrict())
-            return false;
+            return errorMsg(parse, "Bad char in string");
 
           str1 += c;
 
@@ -109,14 +120,14 @@ readString(CStrParse &parse, std::string &str1)
         }
       }
     }
-    else if (parse.isChar('\"'))
+    else if (parse.isChar(startChar))
       break;
     else
       str1 += parse.readChar();
   }
 
-  if (parse.eof() || ! parse.isChar('\"'))
-    return false;
+  if (parse.eof() || ! parse.isChar(startChar))
+    return errorMsg(parse, "Missing close quote for string");
 
   parse.skipChar();
 
@@ -129,7 +140,7 @@ CJson::
 readNumber(CStrParse &parse, std::string &str1)
 {
   if (parse.eof())
-    return false;
+    return errorMsg(parse, "Invalid number");
 
   if (parse.isChar('-'))
     str1 += parse.readChar();
@@ -142,14 +153,14 @@ readNumber(CStrParse &parse, std::string &str1)
       str1 += parse.readChar();
   }
   else
-    return false;
+    return errorMsg(parse, "Invalid number char");
 
   if (parse.isChar('.')) {
     str1 += parse.readChar();
 
     if (isStrict()) {
       if (! parse.isDigit())
-        return false;
+        return errorMsg(parse, "Invalid number char");
     }
 
     while (parse.isDigit())
@@ -164,7 +175,7 @@ readNumber(CStrParse &parse, std::string &str1)
       str1 += parse.readChar();
 
     if (! parse.isDigit())
-      return false;
+      return errorMsg(parse, "Invalid number char");
 
     while (parse.isDigit())
       str1 += parse.readChar();
@@ -179,7 +190,7 @@ CJson::
 readObject(CStrParse &parse, Object *&obj)
 {
   if (! parse.isChar('{'))
-    return false;
+    return errorMsg(parse, "Missing open brace for object");
 
   bool open = false;
 
@@ -204,7 +215,7 @@ readObject(CStrParse &parse, Object *&obj)
 
     if (! parse.isChar(':')) {
       delete obj;
-      return false;
+      return errorMsg(parse, "Missing color separator for object");
     }
 
     parse.skipChar();
@@ -236,12 +247,12 @@ readObject(CStrParse &parse, Object *&obj)
 
   if (open) {
     delete obj;
-    return false;
+    return errorMsg(parse, "Missing data after comma for object");
   }
 
   if (! parse.isChar('}')) {
     delete obj;
-    return false;
+    return errorMsg(parse, "Missing close brace for object");
   }
 
   parse.skipChar();
@@ -255,7 +266,7 @@ CJson::
 readArray(CStrParse &parse, Array *&array)
 {
   if (! parse.isChar('['))
-    return false;
+    return errorMsg(parse, "Missing open square bracket for array");
 
   bool open = false;
 
@@ -294,12 +305,12 @@ readArray(CStrParse &parse, Array *&array)
 
   if (open) {
     delete array;
-    return false;
+    return errorMsg(parse, "Missing value after command for array");
   }
 
   if (! parse.isChar(']')) {
     delete array;
-    return false;
+    return errorMsg(parse, "Missing close square bracket for array");
   }
 
   parse.skipChar();
@@ -313,11 +324,11 @@ CJson::
 readValue(CStrParse &parse, ValueP &value)
 {
   if (parse.eof())
-    return false;
+    return errorMsg(parse, "Invald char for value");
 
   char c = parse.getCharAt();
 
-  if      (c == '\"') {
+  if      (c == '\"' || (c == '\'' && isAllowSingleQuote())) {
     std::string str1;
 
     if (! readString(parse, str1))
@@ -369,7 +380,7 @@ readValue(CStrParse &parse, ValueP &value)
     value = ValueP(createNull());
   }
   else
-    return false;
+    return errorMsg(parse, "Invald char for value");
 
   return true;
 }
@@ -382,10 +393,10 @@ readLine(FILE *fp, std::string &line)
 
   if (feof(fp)) return false;
 
-  char c = fgetc(fp);
+  int c = fgetc(fp);
 
   while (! feof(fp) && c != '\n') {
-    line += c;
+    line += char(c);
 
     c = fgetc(fp);
   }
@@ -400,8 +411,18 @@ loadFile(const std::string &filename, ValueP &value)
 {
   value = ValueP();
 
-  FILE *fp = fopen(filename.c_str(), "r");
-  if (! fp) return false;
+  FILE *fp = nullptr;
+
+  if (filename == "-")
+    fp = stdin;
+  else
+    fp = fopen(filename.c_str(), "r");
+
+  if (! fp) {
+    if (! isQuiet())
+      std::cerr << "Failed to open file " << filename << "\n";
+    return false;
+  }
 
   std::string lines;
 
@@ -457,7 +478,7 @@ loadString(const std::string &lines, ValueP &value)
   parse.skipSpace();
 
   if (! parse.eof())
-    return false;
+    return errorMsg(parse, "Extra characters for string");
 
   return true;
 }
@@ -560,8 +581,8 @@ matchArray(const ValueP &value, const std::string &lhs, const std::string &rhs, 
 
     bool ok1, ok2;
 
-    int i1 = CJson::stol(lhs1, ok1);
-    int i2 = CJson::stol(rhs1, ok2);
+    long i1 = CJson::stol(lhs1, ok1);
+    long i2 = CJson::stol(rhs1, ok2);
 
     if (! ok1 || ! ok2) {
       if (! isQuiet())
@@ -569,11 +590,11 @@ matchArray(const ValueP &value, const std::string &lhs, const std::string &rhs, 
       return false;
     }
 
-    for (int i = i1; i <= i2 && i < int(array->size()); ++i) {
-      ValueP value1 = array->at(i);
+    for (long i = i1; i <= i2 && i < long(array->size()); ++i) {
+      ValueP value1 = array->at(uint(i));
 
       if (rhs1 != "")
-        matchValues(value1, i, rhs1, values);
+        matchValues(value1, int(i), rhs1, values);
       else
         values.push_back(value1);
     }
@@ -581,7 +602,7 @@ matchArray(const ValueP &value, const std::string &lhs, const std::string &rhs, 
   else if (range != "") {
     bool ok;
 
-    int i1 = CJson::stol(range, ok);
+    long i1 = CJson::stol(range, ok);
 
     if (! ok) {
       if (! isQuiet())
@@ -689,11 +710,11 @@ matchValues(const ValueP &value, int ind, const std::string &match, Values &valu
   }
 
   if (match1 != "" && match1[0] != '{') {
-    auto p = match1.find("/");
+    auto p1 = match1.find("/");
 
-    while (p != std::string::npos) {
-      std::string lhs = match1.substr(0, p);
-      std::string rhs = match1.substr(p + 1);
+    while (p1 != std::string::npos) {
+      std::string lhs = match1.substr(0, p1);
+      std::string rhs = match1.substr(p1 + 1);
 
       if (lhs == "")
         return false;
@@ -715,7 +736,7 @@ matchValues(const ValueP &value, int ind, const std::string &match, Values &valu
 
       match1 = rhs;
 
-      p = match1.find("/");
+      p1 = match1.find("/");
     }
   }
 
@@ -729,7 +750,7 @@ matchValues(const ValueP &value, int ind, const std::string &match, Values &valu
     return matchList(value1, ind, match1, "", values);
   }
   else if (match1[0] == '#') {
-    int base = 0;
+    long base = 0;
 
     if (match1.size() > 1) {
       bool ok;
@@ -737,7 +758,7 @@ matchValues(const ValueP &value, int ind, const std::string &match, Values &valu
       base = CJson::stol(match1.substr(1), ok);
     }
 
-    Number *n = createNumber(base + ind);
+    Number *n = createNumber(double(base + ind));
 
     values.push_back(ValueP(n));
   }
@@ -902,7 +923,7 @@ CJson::String *
 CJson::
 createString(const std::string &str)
 {
-  String *jstr = new String(this, str);
+  auto *jstr = new String(this, str);
 
   return jstr;
 }
@@ -911,7 +932,7 @@ CJson::Number *
 CJson::
 createNumber(double r)
 {
-  Number *jnumber = new Number(this, r);
+  auto *jnumber = new Number(this, r);
 
   return jnumber;
 }
@@ -920,7 +941,7 @@ CJson::True *
 CJson::
 createTrue()
 {
-  True *jtrue = new True(this);
+  auto *jtrue = new True(this);
 
   return jtrue;
 }
@@ -929,7 +950,7 @@ CJson::False *
 CJson::
 createFalse()
 {
-  False *jfalse = new False(this);
+  auto *jfalse = new False(this);
 
   return jfalse;
 }
@@ -938,7 +959,7 @@ CJson::Null *
 CJson::
 createNull()
 {
-  Null *jnull = new Null(this);
+  auto *jnull = new Null(this);
 
   return jnull;
 }
@@ -947,7 +968,7 @@ CJson::Object *
 CJson::
 createObject()
 {
-  Object *jobj = new Object(this);
+  auto *jobj = new Object(this);
 
   return jobj;
 }
@@ -956,9 +977,56 @@ CJson::Array *
 CJson::
 createArray()
 {
-  Array *jarray = new Array(this);
+  auto *jarray = new Array(this);
 
   return jarray;
+}
+
+//---
+
+bool
+CJson::
+errorMsg(const CStrParse &parse, const std::string &msg) const
+{
+  if (! isQuiet())
+    std::cerr << "Error: " << msg << " (char " << parse.getPos() << ")\n";
+
+  return false;
+}
+
+//---
+
+std::string
+CJson::
+printSep() const
+{
+  if (isPrintCsv ()) return ",";
+  if (isPrintHtml()) return "</td><td>";
+  if (isPrintFlat()) return " ";
+
+  return " ";
+}
+
+std::string
+CJson::
+printPrefix(bool isArray) const
+{
+  if (isPrintCsv ()) return "";
+  if (isPrintHtml()) return "<td>";
+  if (isPrintFlat()) return "";
+
+  return (isArray ? "[" : "{");
+}
+
+std::string
+CJson::
+printPostfix(bool isArray) const
+{
+  if (isPrintCsv ()) return "";
+  if (isPrintHtml()) return "</td>";
+  if (isPrintFlat()) return "";
+
+  return (isArray ? "]" : "}");
 }
 
 //------
@@ -978,7 +1046,12 @@ void
 CJson::String::
 print(std::ostream &os) const
 {
-  os << "\"" << str_ << "\"";
+  if (json_->isPrintHtml()) {
+    // TODO: encode html
+    os << str_;
+  }
+  else
+    os << "\"" << str_ << "\"";
 }
 
 void
@@ -1015,7 +1088,10 @@ void
 CJson::True::
 print(std::ostream &os) const
 {
-  os << "\"true\"";
+  if (json_->isPrintHtml())
+    os << "true";
+  else
+    os << "\"true\"";
 }
 
 //------
@@ -1024,7 +1100,10 @@ void
 CJson::False::
 print(std::ostream &os) const
 {
-  os << "\"false\"";
+  if (json_->isPrintHtml())
+    os << "false";
+  else
+    os << "\"false\"";
 }
 
 //------
@@ -1033,7 +1112,10 @@ void
 CJson::Null::
 print(std::ostream &os) const
 {
-  os << "\"null\"";
+  if (json_->isPrintHtml())
+    os << "null";
+  else
+    os << "\"null\"";
 }
 
 //------
@@ -1129,28 +1211,27 @@ print(std::ostream &os) const
 {
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "{";
+  os << json_->printPrefix();
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &nv : nameValueArray_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
-    os << "\"" << nv.first << "\":";
+    if (! json_->isPrintHtml())
+      os << "\"" << nv.first << "\":";
+    else
+      os << nv.first;
 
-    nv.second->print(os);
+    if (json_->isPrintShort())
+      nv.second->printShort(os);
+    else
+      nv.second->print(os);
 
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "}";
+  os << json_->printPostfix();
 }
 
 void
@@ -1159,18 +1240,12 @@ printReal(std::ostream &os) const
 {
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "{";
+  os << json_->printPrefix();
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &nv : nameValueArray_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
     os << "\"" << nv.first << "\":";
 
@@ -1179,8 +1254,7 @@ printReal(std::ostream &os) const
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "}";
+  os << json_->printPostfix();
 }
 
 void
@@ -1189,26 +1263,19 @@ printName(std::ostream &os) const
 {
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "{";
+  os << json_->printPrefix();
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &nv : nameValueArray_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
     os << nv.first;
 
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "}";
+  os << json_->printPostfix();
 }
 
 void
@@ -1217,26 +1284,22 @@ printValue(std::ostream &os) const
 {
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "{";
+  os << json_->printPrefix();
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &nv : nameValueArray_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
-    nv.second->print(os);
+    if (json_->isPrintShort())
+      nv.second->printShort(os);
+    else
+      nv.second->print(os);
 
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "}";
+  os << json_->printPostfix();
 }
 
 //------
@@ -1271,26 +1334,19 @@ printReal(std::ostream &os) const
 {
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "[";
+  os << json_->printPrefix(/*isArray*/true);
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &v : values_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
     v->printReal(os);
 
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "]";
+  os << json_->printPostfix(/*isArray*/true);
 }
 
 //------
@@ -1332,26 +1388,28 @@ void
 CJson::Array::
 print(std::ostream &os) const
 {
+  // just print child array if flat and single array child
+  if (json_->isPrintFlat() && values_.size() == 1 && values_[0]->isArray()) {
+    values_[0]->print(os);
+    return;
+  }
+
   bool first = true;
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "[";
+  os << json_->printPrefix(/*isArray*/true);
 
-  std::string sep = (json_->isPrintCsv() ? "," : " ");
+  auto sep = json_->printSep();
 
   for (const auto &v : values_) {
-    if (! json_->isPrintFlat() && ! json_->isPrintCsv()) {
-      if (! first) os << ",";
-    }
-    else {
-      if (! first) os << sep;
-    }
+    if (! first) os << sep;
 
-    v->print(os);
+    if (json_->isPrintShort())
+      v->printShort(os);
+    else
+      v->print(os);
 
     first = false;
   }
 
-  if (! json_->isPrintFlat() && ! json_->isPrintCsv())
-    os << "]";
+  os << json_->printPostfix(/*isArray*/true);
 }

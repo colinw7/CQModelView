@@ -363,7 +363,7 @@ class CQModelView : public QAbstractItemView {
 
   QSize sizeHint() const override { return QSize(100, 100); }
 
- signals:
+ Q_SIGNALS:
   void expanded (const QModelIndex &index);
   void collapsed(const QModelIndex &index);
 
@@ -551,7 +551,7 @@ class CQModelView : public QAbstractItemView {
 
   QSizeF viewItemTextLayout(QTextLayout &textLayout, int lineWidth) const;
 
- public slots:
+ public Q_SLOTS:
   void hideColumn(int column);
   void showColumn(int column);
 
@@ -565,7 +565,10 @@ class CQModelView : public QAbstractItemView {
   void collapseAll();
   void expandToDepth(int depth);
 
- private slots:
+  void selectAllSlot();
+  void fitAllColumnsSlot();
+
+ private Q_SLOTS:
   void modelChangedSlot();
 
   void hscrollSlot(int v);
@@ -601,7 +604,6 @@ class CQModelView : public QAbstractItemView {
   void hideColumnSlot();
   void showAllColumnsSlot();
 
-  void fitAllColumnsSlot();
   void fitColumnSlot();
   void fitNoScrollSlot();
 
@@ -890,10 +892,34 @@ class CQModelViewSelectionModel : public QItemSelectionModel {
 //---
 
 class CQModelViewCornerButton : public QAbstractButton {
+  Q_OBJECT
+
+  Q_PROPERTY(ClickOp clickOp READ clickOp WRITE setClickOp)
+
+  Q_ENUMS(ClickOp)
+
  public:
+  enum class ClickOp {
+    FIT_ALL,
+    SELECT_ALL
+  };
+
   CQModelViewCornerButton(CQModelView *view);
 
+  const ClickOp &clickOp() const { return clickOp_; }
+  void setClickOp(const ClickOp &o);
+
+  void contextMenuEvent(QContextMenuEvent *e) override;
+
   void paintEvent(QPaintEvent*) override;
+
+ private Q_SLOTS:
+  void clickSlot();
+
+ private:
+  CQModelView* view_    { nullptr };
+  ClickOp      clickOp_ { ClickOp::FIT_ALL };
+  QPixmap      pixmap_;
 };
 
 //---
@@ -928,7 +954,7 @@ class CQModelViewHeaderEdit : public QLineEdit {
 
   void keyPressEvent(QKeyEvent *e) override;
 
- private slots:
+ private Q_SLOTS:
   void acceptSlot();
 
  private:
