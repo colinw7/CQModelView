@@ -534,6 +534,9 @@ class CQModelView : public QAbstractItemView {
   void drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
                 const VisRowData &visRowData, const VisColumnData &visColumnData) const;
 
+  void drawCellBackground(QPainter *painter, const QStyleOptionViewItem &option,
+                          const QModelIndex &ind) const;
+
   bool isIndexExpanded(const QModelIndex &index) const;
 
   bool cellPositionToIndex(PositionData &posData) const;

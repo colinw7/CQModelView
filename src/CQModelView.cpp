@@ -2681,6 +2681,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
   option.widget                 = this;
   option.rect                   = visCellData.rect;
   option.font                   = font();
+  option.fontMetrics            = QFontMetrics(option.font);
   option.decorationSize         = paintData_.decorationSize;
   option.decorationPosition     = QStyleOptionViewItem::Left;
   option.decorationAlignment    = Qt::AlignCenter;
@@ -2690,6 +2691,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
   //---
 
+#if 0
   auto fillBackground = [&]() {
     auto bgVar = model_->data(ind, Qt::BackgroundRole);
 
@@ -2718,11 +2720,39 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
     else
       setRoleBrush(painter, ColorRole::Base);
   };
+#endif
 
   //---
 
-  if (! delegate_) {
-    fillBackground();
+  // set font
+  auto fontVar = ind.data(Qt::FontRole);
+
+  if (fontVar.isValid()){
+    option.font        = qvariant_cast<QFont>(fontVar).resolve(option.font);
+    option.fontMetrics = QFontMetrics(option.font);
+  }
+
+  // set text alignment
+  auto alignVar = ind.data(Qt::TextAlignmentRole);
+
+  if (alignVar.isValid())
+    option.displayAlignment = Qt::Alignment(alignVar.toInt());
+
+  // set foreground brush
+  auto fgVar = ind.data(Qt::ForegroundRole);
+
+  if (fgVar.canConvert<QBrush>())
+    option.palette.setBrush(QPalette::Text, qvariant_cast<QBrush>(fgVar));
+
+  // disable style animations for checkboxes etc. within itemview
+  option.styleObject = 0;
+
+  //---
+
+  auto *delegate = itemDelegate();
+
+  if (! delegate) {
+    drawCellBackground(painter, option, ind);
 
     // draw cell value
     setRolePen(painter, ColorRole::HeaderFg);
@@ -2735,10 +2765,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
 
     painter->save();
 
-    auto fgVar = model_->data(ind, Qt::ForegroundRole);
-
-    if (fgVar.canConvert<QBrush>())
-      painter->setPen(qvariant_cast<QBrush>(fgVar).color());
+    painter->setPen(option.palette.brush(QPalette::Text).color());
 
     painter->setClipRect(textRect);
 
@@ -2782,9 +2809,10 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
   else {
     //style()->drawPrimitive(QStyle::PE_PanelItemViewRow, &option, painter, this);
 
-    fillBackground();
+    //drawCellBackground(painter, option, ind);
 
-    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
+    auto *delegate  = itemDelegate();
+    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate);
 
     if (idelegate) {
       const ColumnData &columnData = columnDatas_[uint(c)];
@@ -2797,8 +2825,41 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
         option.state |= QStyle::State_HasEditFocus;
     }
 
-    delegate_->paint(painter, option, ind);
+    delegate->paint(painter, option, ind);
   }
+}
+
+void
+CQModelView::
+drawCellBackground(QPainter *painter, const QStyleOptionViewItem &option,
+                   const QModelIndex &ind) const
+{
+  auto bgVar = model_->data(ind, Qt::BackgroundRole);
+
+ if (bgVar.canConvert<QBrush>())
+   painter->setBrush(qvariant_cast<QBrush>(bgVar).color());
+
+ //---
+
+ if (option.state & QStyle::State_MouseOver) {
+   setRolePen  (painter, ColorRole::MouseOverFg);
+   setRoleBrush(painter, ColorRole::MouseOverBg);
+ }
+ else {
+   setRolePen(painter, ColorRole::Text);
+
+   if (option.features & QStyleOptionViewItem::Alternate)
+     setRoleBrush(painter, ColorRole::AlternateBg);
+   else
+     setRoleBrush(painter, ColorRole::Base);
+ }
+
+ painter->fillRect(option.rect, painter->brush());
+
+ if (option.features & QStyleOptionViewItem::Alternate)
+   setRoleBrush(painter, ColorRole::AlternateBg);
+ else
+   setRoleBrush(painter, ColorRole::Base);
 }
 
 //------
@@ -3877,7 +3938,8 @@ addMenuActions(QMenu *menu)
   //---
 
   if (column >= 0) {
-    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate_);
+    auto *delegate  = itemDelegate();
+    auto *idelegate = qobject_cast<CQItemDelegate *>(delegate);
 
     if (idelegate && idelegate->isNumericColumn(column)) {
       auto *decorationMenu = addMenu("Decoration");
@@ -4547,6 +4609,33 @@ CQModelView::
 maxColumnWidth(int column, const QModelIndex &parent, int depth,
                int &nvr, int &maxWidth, int maxRows)
 {
+  auto *delegate = itemDelegate();
+
+  //---
+
+  // init style data
+  QStyleOptionViewItem option;
+
+  if (delegate) {
+    option.init(this);
+
+    option.state    &= ~QStyle::State_MouseOver;
+    option.state    &= ~QStyle::State_HasFocus;
+    option.features &= ~QStyleOptionViewItem::Alternate;
+
+    option.widget              = this;
+    option.rect                = QRect(0, 0, 100, paintData_.rowHeight);
+    option.font                = font();
+    option.fontMetrics         = QFontMetrics(option.font);
+    option.decorationSize      = paintData_.decorationSize;
+    option.decorationPosition  = QStyleOptionViewItem::Left;
+    option.decorationAlignment = Qt::AlignCenter;
+    option.displayAlignment    = Qt::AlignHCenter | Qt::AlignVCenter;
+    option.textElideMode       = textElideMode();
+  }
+
+  //---
+
   if (model_ && model_->canFetchMore(parent))
     model_->fetchMore(parent);
 
@@ -4560,29 +4649,58 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
 
     auto ind = model_->index(r, column, parent);
 
-    auto data = model_->data(ind, Qt::DisplayRole);
+    //---
 
-    int w = 0;
+    int  w       = 0;
+    bool useData = true;
 
-#if 1
-    auto strs = data.toString().split("\n");
+    if (delegate) {
+      auto size = delegate->sizeHint(option, ind);
 
-    int nl = strs.length();
-
-    for (int i = 0; i < nl; ++i) {
-      const auto &str = strs[i];
-
-      w = std::max(w, paintData_.fm.horizontalAdvance(str));
+      if (size.isValid()) {
+        w       = size.width();
+        useData = false;
+      }
     }
-#else
-    w = paintData_.fm.horizontalAdvance(data.toString());
-#endif
 
+    //---
+
+    if (useData) {
+      // get cell data
+      auto data = model_->data(ind, Qt::DisplayRole);
+
+    //---
+
+      // get max string width
+#if 1
+      auto strs = data.toString().split("\n");
+
+      int nl = strs.length();
+
+      for (int i = 0; i < nl; ++i) {
+        const auto &str = strs[i];
+
+        w = std::max(w, paintData_.fm.horizontalAdvance(str));
+      }
+#else
+      w = paintData_.fm.horizontalAdvance(data.toString());
+#endif
+    }
+
+    //---
+
+    // add hierarchical depth indent
     if (isHierarchical() && column == 0)
       w += (depth + rootIsDecorated())*indentation();
 
+    //---
+
+    // update max width
     maxWidth = std::max(maxWidth, w);
 
+    //---
+
+    // update rows and stop if max
     ++nvr;
 
     if (nvr > maxRows)
@@ -4590,6 +4708,7 @@ maxColumnWidth(int column, const QModelIndex &parent, int depth,
 
     //---
 
+    // check expanded parent
     auto ind1 = model_->index(r, 0, parent);
 
     if (model_->hasChildren(ind1) && isExpanded(ind1)) {

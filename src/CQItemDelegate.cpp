@@ -106,7 +106,7 @@ drawRealInRange(QPainter *painter, const QStyleOptionViewItem &option,
   auto initSelected = [&]() {
     auto c = option.palette.color(QPalette::Highlight);
 
-    option1.palette.setColor(QPalette::Highlight, QColor(0,0,0,0));
+    option1.palette.setColor(QPalette::Highlight, QColor(0, 0, 0, 0));
     option1.palette.setColor(QPalette::HighlightedText, c);
     option1.palette.setColor(QPalette::Text, c);
 
