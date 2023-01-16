@@ -761,7 +761,7 @@ class CQModelView : public QAbstractItemView {
   using VisRowDatas        = std::map<QModelIndex, RowVisRowDatas>; // parent rows
   using VisFlatRows        = std::vector<int>;
   using VisCellDatas       = std::map<QModelIndex, VisCellData>;
-  using FilterEdits        = std::vector<CQModelViewFilterEdit*>;
+  using FilterEdits        = std::vector<CQModelViewFilterEdit *>;
   using IndexSet           = std::set<QModelIndex>;
   using ColumnSpan         = std::pair<int, int>;
   using ColumnSpans        = std::vector<ColumnSpan>;
@@ -935,6 +935,8 @@ class CQModelViewFilterEdit : public QLineEdit {
 
   int column() const { return column_; }
   void setColumn(int c) { column_ = c; }
+
+  void keyPressEvent(QKeyEvent *e) override;
 
  private:
   CQModelView* view_   { nullptr };

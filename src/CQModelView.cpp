@@ -829,6 +829,13 @@ setShowFilter(bool b)
 
     redraw();
 
+    if (showFilter_) {
+      int nfe = int(filterEdits_.size());
+
+      if (nfe > 0)
+        filterEdits_[0]->setFocus();
+    }
+
     emit stateChanged();
   }
 }
@@ -5454,6 +5461,18 @@ CQModelViewFilterEdit(CQModelView *view, int column) :
  QLineEdit(view), view_(view), column_(column)
 {
   setObjectName("filterEdit");
+}
+
+void
+CQModelViewFilterEdit::
+keyPressEvent(QKeyEvent *e)
+{
+  if (e->key() == Qt::Key_Escape) {
+    view_->setShowFilter(false);
+    return;
+  }
+
+  QLineEdit::keyPressEvent(e);
 }
 
 //------
