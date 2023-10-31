@@ -1640,20 +1640,20 @@ drawCells(QPainter *painter) const
   paintData_.vrect     = viewport()->rect();
   paintData_.vw        = paintData_.vrect.width ();
   paintData_.vh        = paintData_.vrect.height();
-  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
   if (iconSize().isValid()) {
     paintData_.decorationSize = iconSize();
   }
   else {
-    int pm = style()->pixelMetric(QStyle::PM_SmallIconSize, 0, this);
+    int pm = style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, this);
 
     paintData_.decorationSize = QSize(pm, pm);
   }
 
   paintData_.showDecorationSelected =
-    style()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, 0, this);
+    style()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, nullptr, this);
 
   //---
 
@@ -1942,7 +1942,7 @@ drawHHeader(QPainter *painter) const
   paintData_.vrect     = hh_->viewport()->rect();
   paintData_.vw        = paintData_.vrect.width ();
   paintData_.vh        = paintData_.vrect.height();
-  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
   if (showHHeaderLines())
@@ -2343,7 +2343,7 @@ drawVHeader(QPainter *painter) const
   paintData_.vrect     = vh_->viewport()->rect();
   paintData_.vw        = paintData_.vrect.width ();
   paintData_.vh        = paintData_.vrect.height();
-  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  paintData_.margin    = style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, hh_);
   paintData_.rowHeight = this->rowHeight(0);
 
   if (showVHeaderLines())
@@ -2752,7 +2752,7 @@ drawCell(QPainter *painter, int r, int c, const QModelIndex &parent,
     option.palette.setBrush(QPalette::Text, qvariant_cast<QBrush>(fgVar));
 
   // disable style animations for checkboxes etc. within itemview
-  option.styleObject = 0;
+  option.styleObject = nullptr;
 
   //---
 
@@ -2894,7 +2894,7 @@ updateVisColumns()
 
   int x1 = -horizontalOffset();
 
-  int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, hh_);
 
   freezeWidth_  = 0;
   freezeColumn_ = -1;
@@ -3344,7 +3344,7 @@ handleMousePress()
 {
   // mouse type for expand/collapse of tree
   if (isHierarchical()) {
-    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, 0, this) ==
+    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, nullptr, this) ==
           QEvent::MouseButtonPress) {
       if (mouseData_.pressData.iind.isValid()) {
         setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
@@ -3594,7 +3594,7 @@ handleMouseRelease()
 
   // mouse type for expand/collapse of tree
   if (isHierarchical()) {
-    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, 0, this) ==
+    if (style()->styleHint(QStyle::SH_ListViewExpand_SelectMouseType, nullptr, this) ==
           QEvent::MouseButtonRelease) {
       if (mouseData_.pressData.iind.isValid()) {
         setExpanded(mouseData_.pressData.iind, ! isExpanded(mouseData_.pressData.iind));
@@ -4570,7 +4570,7 @@ resizeColumnToContents(int column)
 
   //---
 
-  int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, hh_);
+  int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, hh_);
   int ispace = 4;
 
   maxWidth += 2*margin + 2*ispace;

@@ -80,7 +80,7 @@ class CQModelViewStats : public QFrame {
  private:
   CQModelView* view_ { nullptr };
 
-  QSize sizeHint() const;
+  QSize sizeHint() const override;
 
  private slots:
   void updateSlot();

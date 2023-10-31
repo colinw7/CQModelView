@@ -285,7 +285,7 @@ load(const QString &filename)
         auto value   = QString::fromStdString(fields[3]);
 
         // get role
-        int role = CQModelUtil::nameToRole(roleStr);
+        int role = CQModelUtil::nameToRole(this, roleStr);
 
         if (role < 0) {
           std::cerr << "Invalid role '" << fields[2] << "'\n";
@@ -354,7 +354,7 @@ load(const QString &filename)
             QDataStream in(&ibuffer);
             in.setVersion(dataStreamVersion());
 
-            var = QVariant(type, 0);
+            var = QVariant(type, nullptr);
 
             // const cast is safe since we operate on a newly constructed variant
             if (! QMetaType::load(in, type, const_cast<void *>(var.constData()))) {
@@ -384,24 +384,26 @@ load(const QString &filename)
           setReadOnly(readOnly);
       }
       // handle global data
-      //   global <> <name> <value>
+      //  3: global,<name>,<value>
+      //  4: global,<name>,<key>,<value>
       else if (fields[0] == "global") {
-        std::string name, value;
+        QString name, key, value;
 
         if      (numFields == 3) {
-          name  = fields[1];
-          value = fields[2];
+          name  = QString::fromStdString(fields[1]);
+          value = QString::fromStdString(fields[2]);
         }
         else if (numFields == 4) {
-          name  = fields[1];
-          value = fields[3];
+          name  = QString::fromStdString(fields[1]);
+          key   = QString::fromStdString(fields[2]);
+          value = QString::fromStdString(fields[3]);
         }
         else {
           std::cerr << "Invalid global data\n";
           continue;
         }
 
-        setNameValue(name.c_str(), value.c_str());
+        setMetaNameValue(name, key, value);
       }
       else {
         std::cerr << "Unknown meta data '" << fields[0] << "\n";
