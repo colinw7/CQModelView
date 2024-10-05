@@ -15,3 +15,5 @@
 + disable sort
 + extra rows always at bottom (lock ?)
 + extra row/column special render
++ row select with mouse drag selects items
++ freeze first column does not clear cell

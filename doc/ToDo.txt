@@ -1,0 +1,2 @@
+. freeze data in update call
+. speed up redraw
